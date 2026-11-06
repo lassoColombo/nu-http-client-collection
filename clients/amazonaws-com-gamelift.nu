@@ -12,28 +12,37 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -96,16 +119,26 @@ def base-url-completer [] { ["http://gamelift.us-east-1.amazonaws.com" "http://g
 def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
+def acceptance-type-completer [] { ["ACCEPT" "REJECT"] }
 def x-amz-target-completer [] { ["GameLift.AcceptMatch"] }
 def x-amz-target-completer-1 [] { ["GameLift.ClaimGameServer"] }
 def x-amz-target-completer-2 [] { ["GameLift.CreateAlias"] }
+def operating-system-completer [] { ["AMAZON_LINUX" "AMAZON_LINUX_2" "WINDOWS_2012" "WINDOWS_2016"] }
 def x-amz-target-completer-3 [] { ["GameLift.CreateBuild"] }
+def ec2-instance-type-completer [] { ["c3.2xlarge" "c3.4xlarge" "c3.8xlarge" "c3.large" "c3.xlarge" "c4.2xlarge" "c4.4xlarge" "c4.8xlarge" "c4.large" "c4.xlarge" "c5.12xlarge" "c5.18xlarge" "c5.24xlarge" "c5.2xlarge" "c5.4xlarge" "c5.9xlarge" "c5.large" "c5.xlarge" "c5a.12xlarge" "c5a.16xlarge" "c5a.24xlarge" "c5a.2xlarge" "c5a.4xlarge" "c5a.8xlarge" "c5a.large" "c5a.xlarge" "c5d.12xlarge" "c5d.18xlarge" "c5d.24xlarge" "c5d.2xlarge" "c5d.4xlarge" "c5d.9xlarge" "c5d.large" "c5d.xlarge" "c6a.12xlarge" "c6a.16xlarge" "c6a.24xlarge" "c6a.2xlarge" "c6a.4xlarge" "c6a.8xlarge" "c6a.large" "c6a.xlarge" "c6i.12xlarge" "c6i.16xlarge" "c6i.24xlarge" "c6i.2xlarge" "c6i.4xlarge" "c6i.8xlarge" "c6i.large" "c6i.xlarge" "m3.2xlarge" "m3.large" "m3.medium" "m3.xlarge" "m4.10xlarge" "m4.2xlarge" "m4.4xlarge" "m4.large" "m4.xlarge" "m5.12xlarge" "m5.16xlarge" "m5.24xlarge" "m5.2xlarge" "m5.4xlarge" "m5.8xlarge" "m5.large" "m5.xlarge" "m5a.12xlarge" "m5a.16xlarge" "m5a.24xlarge" "m5a.2xlarge" "m5a.4xlarge" "m5a.8xlarge" "m5a.large" "m5a.xlarge" "r3.2xlarge" "r3.4xlarge" "r3.8xlarge" "r3.large" "r3.xlarge" "r4.16xlarge" "r4.2xlarge" "r4.4xlarge" "r4.8xlarge" "r4.large" "r4.xlarge" "r5.12xlarge" "r5.16xlarge" "r5.24xlarge" "r5.2xlarge" "r5.4xlarge" "r5.8xlarge" "r5.large" "r5.xlarge" "r5a.12xlarge" "r5a.16xlarge" "r5a.24xlarge" "r5a.2xlarge" "r5a.4xlarge" "r5a.8xlarge" "r5a.large" "r5a.xlarge" "r5d.12xlarge" "r5d.16xlarge" "r5d.24xlarge" "r5d.2xlarge" "r5d.4xlarge" "r5d.8xlarge" "r5d.large" "r5d.xlarge" "t2.large" "t2.medium" "t2.micro" "t2.small"] }
+def new-game-session-protection-policy-completer [] { ["FullProtection" "NoProtection"] }
+def fleet-type-completer [] { ["ON_DEMAND" "SPOT"] }
+def compute-type-completer [] { ["ANYWHERE" "EC2"] }
 def x-amz-target-completer-4 [] { ["GameLift.CreateFleet"] }
 def x-amz-target-completer-5 [] { ["GameLift.CreateFleetLocations"] }
+def balancing-strategy-completer [] { ["ON_DEMAND_ONLY" "SPOT_ONLY" "SPOT_PREFERRED"] }
+def game-server-protection-policy-completer [] { ["FULL_PROTECTION" "NO_PROTECTION"] }
 def x-amz-target-completer-6 [] { ["GameLift.CreateGameServerGroup"] }
 def x-amz-target-completer-7 [] { ["GameLift.CreateGameSession"] }
 def x-amz-target-completer-8 [] { ["GameLift.CreateGameSessionQueue"] }
 def x-amz-target-completer-9 [] { ["GameLift.CreateLocation"] }
+def backfill-mode-completer [] { ["AUTOMATIC" "MANUAL"] }
+def flex-match-mode-completer [] { ["STANDALONE" "WITH_QUEUE"] }
 def x-amz-target-completer-10 [] { ["GameLift.CreateMatchmakingConfiguration"] }
 def x-amz-target-completer-11 [] { ["GameLift.CreateMatchmakingRuleSet"] }
 def x-amz-target-completer-12 [] { ["GameLift.CreatePlayerSession"] }
@@ -117,6 +150,7 @@ def x-amz-target-completer-17 [] { ["GameLift.DeleteAlias"] }
 def x-amz-target-completer-18 [] { ["GameLift.DeleteBuild"] }
 def x-amz-target-completer-19 [] { ["GameLift.DeleteFleet"] }
 def x-amz-target-completer-20 [] { ["GameLift.DeleteFleetLocations"] }
+def delete-option-completer [] { ["FORCE_DELETE" "RETAIN" "SAFE_DELETE"] }
 def x-amz-target-completer-21 [] { ["GameLift.DeleteGameServerGroup"] }
 def x-amz-target-completer-22 [] { ["GameLift.DeleteGameSessionQueue"] }
 def x-amz-target-completer-23 [] { ["GameLift.DeleteLocation"] }
@@ -153,6 +187,7 @@ def x-amz-target-completer-53 [] { ["GameLift.DescribeMatchmakingConfigurations"
 def x-amz-target-completer-54 [] { ["GameLift.DescribeMatchmakingRuleSets"] }
 def x-amz-target-completer-55 [] { ["GameLift.DescribePlayerSessions"] }
 def x-amz-target-completer-56 [] { ["GameLift.DescribeRuntimeConfiguration"] }
+def status-filter-completer [] { ["ACTIVE" "DELETED" "DELETE_REQUESTED" "DELETING" "ERROR" "UPDATE_REQUESTED" "UPDATING"] }
 def x-amz-target-completer-57 [] { ["GameLift.DescribeScalingPolicies"] }
 def x-amz-target-completer-58 [] { ["GameLift.DescribeScript"] }
 def x-amz-target-completer-59 [] { ["GameLift.DescribeVpcPeeringAuthorizations"] }
@@ -161,15 +196,22 @@ def x-amz-target-completer-61 [] { ["GameLift.GetComputeAccess"] }
 def x-amz-target-completer-62 [] { ["GameLift.GetComputeAuthToken"] }
 def x-amz-target-completer-63 [] { ["GameLift.GetGameSessionLogUrl"] }
 def x-amz-target-completer-64 [] { ["GameLift.GetInstanceAccess"] }
+def routing-strategy-type-completer [] { ["SIMPLE" "TERMINAL"] }
 def x-amz-target-completer-65 [] { ["GameLift.ListAliases"] }
+def status-completer [] { ["FAILED" "INITIALIZED" "READY"] }
 def x-amz-target-completer-66 [] { ["GameLift.ListBuilds"] }
 def x-amz-target-completer-67 [] { ["GameLift.ListCompute"] }
 def x-amz-target-completer-68 [] { ["GameLift.ListFleets"] }
 def x-amz-target-completer-69 [] { ["GameLift.ListGameServerGroups"] }
+def sort-order-completer [] { ["ASCENDING" "DESCENDING"] }
 def x-amz-target-completer-70 [] { ["GameLift.ListGameServers"] }
 def x-amz-target-completer-71 [] { ["GameLift.ListLocations"] }
 def x-amz-target-completer-72 [] { ["GameLift.ListScripts"] }
 def x-amz-target-completer-73 [] { ["GameLift.ListTagsForResource"] }
+def scaling-adjustment-type-completer [] { ["ChangeInCapacity" "ExactCapacity" "PercentChangeInCapacity"] }
+def comparison-operator-completer [] { ["GreaterThanOrEqualToThreshold" "GreaterThanThreshold" "LessThanOrEqualToThreshold" "LessThanThreshold"] }
+def metric-name-completer [] { ["ActivatingGameSessions" "ActiveGameSessions" "ActiveInstances" "AvailableGameSessions" "AvailablePlayerSessions" "ConcurrentActivatableGameSessions" "CurrentPlayerSessions" "IdleInstances" "PercentAvailableGameSessions" "PercentIdleInstances" "QueueDepth" "WaitTime"] }
+def policy-type-completer [] { ["RuleBased" "TargetBased"] }
 def x-amz-target-completer-74 [] { ["GameLift.PutScalingPolicy"] }
 def x-amz-target-completer-75 [] { ["GameLift.RegisterCompute"] }
 def x-amz-target-completer-76 [] { ["GameLift.RegisterGameServer"] }
@@ -192,8 +234,12 @@ def x-amz-target-completer-92 [] { ["GameLift.UpdateBuild"] }
 def x-amz-target-completer-93 [] { ["GameLift.UpdateFleetAttributes"] }
 def x-amz-target-completer-94 [] { ["GameLift.UpdateFleetCapacity"] }
 def x-amz-target-completer-95 [] { ["GameLift.UpdateFleetPortSettings"] }
+def utilization-status-completer [] { ["AVAILABLE" "UTILIZED"] }
+def health-check-completer [] { ["HEALTHY"] }
 def x-amz-target-completer-96 [] { ["GameLift.UpdateGameServer"] }
 def x-amz-target-completer-97 [] { ["GameLift.UpdateGameServerGroup"] }
+def player-session-creation-policy-completer [] { ["ACCEPT_ALL" "DENY_ALL"] }
+def protection-policy-completer [] { ["FullProtection" "NoProtection"] }
 def x-amz-target-completer-98 [] { ["GameLift.UpdateGameSession"] }
 def x-amz-target-completer-99 [] { ["GameLift.UpdateGameSessionQueue"] }
 def x-amz-target-completer-100 [] { ["GameLift.UpdateMatchmakingConfiguration"] }
@@ -204,9 +250,9 @@ def x-amz-target-completer-103 [] { ["GameLift.ValidateMatchmakingRuleSet"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "accept-match" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["accept-match" "claim-game-server" "create-alias" "create-build" "create-fleet" "create-fleet-locations" "create-game-server-group" "create-game-session" "create-game-session-queue" "create-location" "create-matchmaking-configuration" "create-matchmaking-rule-set" "create-player-session" "create-player-sessions" "create-script" "create-vpc-peering-authorization" "create-vpc-peering-connection" "delete-alias" "delete-build" "delete-fleet" "delete-fleet-locations" "delete-game-server-group" "delete-game-session-queue" "delete-location" "delete-matchmaking-configuration" "delete-matchmaking-rule-set" "delete-scaling-policy" "delete-script" "delete-vpc-peering-authorization" "delete-vpc-peering-connection" "deregister-compute" "deregister-game-server" "describe-alias" "describe-build" "describe-compute" "describe-ec2-instance-limits" "describe-fleet-attributes" "describe-fleet-capacity" "describe-fleet-events" "describe-fleet-location-attributes" "describe-fleet-location-capacity" "describe-fleet-location-utilization" "describe-fleet-port-settings" "describe-fleet-utilization" "describe-game-server" "describe-game-server-group" "describe-game-server-instances" "describe-game-session-details" "describe-game-session-placement" "describe-game-session-queues" "describe-game-sessions" "describe-instances" "describe-matchmaking" "describe-matchmaking-configurations" "describe-matchmaking-rule-sets" "describe-player-sessions" "describe-runtime-configuration" "describe-scaling-policies" "describe-script" "describe-vpc-peering-authorizations" "describe-vpc-peering-connections" "get-compute-access" "get-compute-auth-token" "get-game-session-log-url" "get-instance-access" "list-aliases" "list-builds" "list-compute" "list-fleets" "list-game-server-groups" "list-game-servers" "list-locations" "list-scripts" "list-tags-for-resource" "put-scaling-policy" "register-compute" "register-game-server" "request-upload-credentials" "resolve-alias" "resume-game-server-group" "search-game-sessions" "start-fleet-actions" "start-game-session-placement" "start-match-backfill" "start-matchmaking" "stop-fleet-actions" "stop-game-session-placement" "stop-matchmaking" "suspend-game-server-group" "tag-resource" "untag-resource" "update-alias" "update-build" "update-fleet-attributes" "update-fleet-capacity" "update-fleet-port-settings" "update-game-server" "update-game-server-group" "update-game-session" "update-game-session-queue" "update-matchmaking-configuration" "update-runtime-configuration" "update-script" "validate-matchmaking-rule-set" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -245,14 +291,15 @@ export def "accept-match" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer
-  ticket_id: any
-  player_ids: any
-  acceptance_type: any
-]: any -> record {
+  --x-amz-target: string@x-amz-target-completer # required
+  ticket_id: string # A unique identifier for a matchmaking ticket. The ticket must be in status REQUIRES_ACCEPTANCE; otherwise this request will fail.
+  player_ids: list<string> # A unique identifier for a player delivering the response. This parameter can include one or multiple player IDs.
+  acceptance_type: string@acceptance-type-completer # Player response to the proposed match.
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "GameLift.AcceptMatch")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"TicketId": $ticket_id, "PlayerIds": $player_ids, "AcceptanceType": $acceptance_type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -295,14 +342,15 @@ export def "claim-game-server" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-1
-  game_server_group_name: any
-  --game-server-id: any
-  --game-server-data: any
-]: any -> record<GameServer: record<GameServerGroupName: record, GameServerGroupArn: record, GameServerId: record, InstanceId: record, ConnectionInfo: record, GameServerData: record, ClaimStatus: record, UtilizationStatus: record, RegistrationTime: record, LastClaimTime: record, LastHealthCheckTime: record>> {
+  --x-amz-target: string@x-amz-target-completer-1 # required
+  game_server_group_name: string # A unique identifier for the game server group where the game server is running. If you are not specifying a game server to claim, this value identifies where you want Amazon GameLift FleetIQ to look for an available game server to claim.
+  --game-server-id: string # A custom string that uniquely identifies the game server to claim. If this parameter is left empty, Amazon GameLift FleetIQ searches for an available game server in the specified game server group.
+  --game-server-data: string # A set of custom game server properties, formatted as a single string value. This data is passed to a game client or service when it requests information on game servers.
+]: any -> oneof<record<GameServer: record<GameServerGroupName: string, GameServerGroupArn: string, GameServerId: string, InstanceId: string, ConnectionInfo: string, GameServerData: string, ClaimStatus: string, UtilizationStatus: string, RegistrationTime: string, LastClaimTime: string, LastHealthCheckTime: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "GameLift.ClaimGameServer")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"GameServerGroupName": $game_server_group_name, "GameServerId": $game_server_id, "GameServerData": $game_server_data} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -345,15 +393,16 @@ export def "create-alias" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-2
-  name: any
-  --description: any
-  routing_strategy: any
-  --tags: any
-]: any -> record<Alias: record<AliasId: record, Name: record, AliasArn: record, Description: record, RoutingStrategy: record<Type: record, FleetId: record, Message: record>, CreationTime: record, LastUpdatedTime: record>> {
+  --x-amz-target: string@x-amz-target-completer-2 # required
+  name: string # A descriptive label that is associated with an alias. Alias names do not need to be unique.
+  --description: string # A human-readable description of the alias.
+  routing_strategy: record # The routing configuration for a fleet alias. Related actions All APIs by task (https://docs.aws.amazon.com/gamelift/latest/developerguide/reference-awssdk.html#reference-awssdk-resources-fleets) — shape: {Type?: "SIMPLE"|"TERMINAL", FleetId?: string, Message?: string}
+  --tags: list # A list of labels to assign to the new alias resource. Tags are developer-defined key-value pairs. Tagging Amazon Web Services resources are useful for resource management, access management and cost allocation. For more information, see Tagging Amazon Web Services Resources (https://docs.aws.amazon.com/general/latest/gr/aws_tagging.html) in the Amazon Web Services General Reference. — item shape: {Key: string, Value: string}
+]: any -> oneof<record<Alias: record<AliasId: string, Name: string, AliasArn: string, Description: string, RoutingStrategy: record<Type: string, FleetId: string, Message: string>, CreationTime: string, LastUpdatedTime: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "GameLift.CreateAlias")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Name": $name, "Description": $description, "RoutingStrategy": $routing_strategy, "Tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -396,17 +445,18 @@ export def "create-build" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-3
-  --name: any
-  --version: any
-  --storage-location: any
-  --operating-system: any
-  --tags: any
-  --server-sdk-version: any
-]: any -> record<Build: record<BuildId: record, BuildArn: record, Name: record, Version: record, Status: record, SizeOnDisk: record, OperatingSystem: record, CreationTime: record, ServerSdkVersion: record>, UploadCredentials: record<AccessKeyId: record, SecretAccessKey: record, SessionToken: record>, StorageLocation: record<Bucket: record, Key: record, RoleArn: record, ObjectVersion: record>> {
+  --x-amz-target: string@x-amz-target-completer-3 # required
+  --name: string # A descriptive label associated with a build. Build names don't need to be unique. You can change this value later.
+  --version: string # Version information associated with a build or script. Version strings don't need to be unique. You can change this value later.
+  --storage-location: record # The location in Amazon S3 where build or script files are stored for access by Amazon GameLift. — shape: {Bucket?: string, Key?: string, RoleArn?: string, ObjectVersion?: string}
+  --operating-system: string@operating-system-completer # The operating system that you built the game server binaries to run on. This value determines the type of fleet resources that you can use for this build. If your game build contains multiple executables, they all must run on the same operating system. If an operating system isn't specified when creating a build, Amazon GameLift uses the default value (WINDOWS_2012). This value can't be changed later.
+  --tags: list # A list of labels to assign to the new build resource. Tags are developer defined key-value pairs. Tagging Amazon Web Services resources are useful for resource management, access management and cost allocation. For more information, see Tagging Amazon Web Services Resources (https://docs.aws.amazon.com/general/latest/gr/aws_tagging.html) in the Amazon Web Services General Reference. Once the resource is created, you can use TagResource (https://docs.aws.amazon.com/gamelift/latest/apireference/API_TagResource.html), UntagResource (https://docs.aws.amazon.com/gamelift/latest/apireference/API_UntagResource.html), and ListTagsForResource (https://docs.aws.amazon.com/gamelift/latest/apireference/API_ListTagsForResource.html) to add, remove, and view tags. The maximum tag limit may be lower than stated. See the Amazon Web Services General Reference for actual tagging limits. — item shape: {Key: string, Value: string}
+  --server-sdk-version: string # Data type used for server SDK version.
+]: any -> oneof<record<Build: record<BuildId: string, BuildArn: string, Name: string, Version: string, Status: string, SizeOnDisk: int, OperatingSystem: string, CreationTime: string, ServerSdkVersion: string>, UploadCredentials: record<AccessKeyId: string, SecretAccessKey: string, SessionToken: string>, StorageLocation: record<Bucket: string, Key: string, RoleArn: string, ObjectVersion: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "GameLift.CreateBuild")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Name": $name, "Version": $version, "StorageLocation": $storage_location, "OperatingSystem": $operating_system, "Tags": $tags, "ServerSdkVersion": $server_sdk_version} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -449,33 +499,34 @@ export def "create-fleet" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-4
-  name: any
-  --description: any
-  --build-id: any
-  --script-id: any
-  --server-launch-path: any
-  --server-launch-parameters: any
-  --log-paths: any
-  --ec2-instance-type: any
-  --ec2-inbound-permissions: any
-  --new-game-session-protection-policy: any
-  --runtime-configuration: any
-  --resource-creation-limit-policy: any
-  --metric-groups: any
-  --peer-vpc-aws-account-id: any
-  --peer-vpc-id: any
-  --fleet-type: any
-  --instance-role-arn: any
-  --certificate-configuration: any
-  --locations: any
-  --tags: any
-  --compute-type: any
-  --anywhere-configuration: any
-]: any -> record<FleetAttributes: record<FleetId: record, FleetArn: record, FleetType: record, InstanceType: record, Description: record, Name: record, CreationTime: record, TerminationTime: record, Status: record, BuildId: record, BuildArn: record, ScriptId: record, ScriptArn: record, ServerLaunchPath: record, ServerLaunchParameters: record, LogPaths: record, NewGameSessionProtectionPolicy: record, OperatingSystem: record, ResourceCreationLimitPolicy: record<NewGameSessionsPerCreator: record, PolicyPeriodInMinutes: record>, MetricGroups: record, StoppedActions: record, InstanceRoleArn: record, CertificateConfiguration: record<CertificateType: record>, ComputeType: record, AnywhereConfiguration: record<Cost: record>>, LocationStates: record> {
+  --x-amz-target: string@x-amz-target-completer-4 # required
+  name: string # A descriptive label that is associated with a fleet. Fleet names do not need to be unique.
+  --description: string # A description for the fleet.
+  --build-id: string # The unique identifier for a custom game server build to be deployed on fleet instances. You can use either the build ID or ARN. The build must be uploaded to Amazon GameLift and in READY status. This fleet property cannot be changed later.
+  --script-id: string # The unique identifier for a Realtime configuration script to be deployed on fleet instances. You can use either the script ID or ARN. Scripts must be uploaded to Amazon GameLift prior to creating the fleet. This fleet property cannot be changed later.
+  --server-launch-path: string # This parameter is no longer used. Specify a server launch path using the RuntimeConfiguration parameter. Requests that use this parameter instead continue to be valid.
+  --server-launch-parameters: string # This parameter is no longer used. Specify server launch parameters using the RuntimeConfiguration parameter. Requests that use this parameter instead continue to be valid.
+  --log-paths: list<string> # This parameter is no longer used. To specify where Amazon GameLift should store log files once a server process shuts down, use the Amazon GameLift server API ProcessReady() and specify one or more directory paths in logParameters. For more information, see Initialize the server process (https://docs.aws.amazon.com/gamelift/latest/developerguide/gamelift-sdk-server-api.html#gamelift-sdk-server-initialize) in the Amazon GameLift Developer Guide.
+  --ec2-instance-type: string@ec2-instance-type-completer # The Amazon GameLift-supported Amazon EC2 instance type to use for all fleet instances. Instance type determines the computing resources that will be used to host your game servers, including CPU, memory, storage, and networking capacity. See Amazon Elastic Compute Cloud Instance Types (http://aws.amazon.com/ec2/instance-types/) for detailed descriptions of Amazon EC2 instance types.
+  --ec2-inbound-permissions: list # The allowed IP address ranges and port settings that allow inbound traffic to access game sessions on this fleet. If the fleet is hosting a custom game build, this property must be set before players can connect to game sessions. For Realtime Servers fleets, Amazon GameLift automatically sets TCP and UDP ranges. — item shape: {FromPort: int, ToPort: int, IpRange: string, Protocol: "TCP"|"UDP"}
+  --new-game-session-protection-policy: string@new-game-session-protection-policy-completer # The status of termination protection for active game sessions on the fleet. By default, this property is set to NoProtection. You can also set game session protection for an individual game session by calling UpdateGameSession (gamelift/latest/apireference/API_UpdateGameSession.html). NoProtection - Game sessions can be terminated during active gameplay as a result of a scale-down event. FullProtection - Game sessions in ACTIVE status cannot be terminated during a scale-down event.
+  --runtime-configuration: record # A collection of server process configurations that describe the set of processes to run on each instance in a fleet. Server processes run either an executable in a custom game build or a Realtime Servers script. Amazon GameLift launches the configured processes, manages their life cycle, and replaces them as needed. Each instance checks regularly for an updated runtime configuration. A Amazon GameLift instance is limited to 50 processes running concurrently. To calculate the total number of processes in a runtime configuration, add the values of the ConcurrentExecutions parameter for each server process. Learn more about Running Multiple Processes on a Fleet (https://docs.aws.amazon.com/gamelift/latest/developerguide/fleets-multiprocess.html). — shape: {ServerProcesses?: list, MaxConcurrentGameSessionActivations?: int, GameSessionActivationTimeoutSeconds?: int}
+  --resource-creation-limit-policy: record # A policy that puts limits on the number of game sessions that a player can create within a specified span of time. With this policy, you can control players' ability to consume available resources. The policy is evaluated when a player tries to create a new game session. On receiving a CreateGameSession request, Amazon GameLift checks that the player (identified by CreatorId) has created fewer than game session limit in the specified time period. — shape: {NewGameSessionsPerCreator?: int, PolicyPeriodInMinutes?: int}
+  --metric-groups: list<string> # The name of an Amazon Web Services CloudWatch metric group to add this fleet to. A metric group is used to aggregate the metrics for multiple fleets. You can specify an existing metric group name or set a new name to create a new metric group. A fleet can be included in only one metric group at a time.
+  --peer-vpc-aws-account-id: string # Used when peering your Amazon GameLift fleet with a VPC, the unique identifier for the Amazon Web Services account that owns the VPC. You can find your account ID in the Amazon Web Services Management Console under account settings.
+  --peer-vpc-id: string # A unique identifier for a VPC with resources to be accessed by your Amazon GameLift fleet. The VPC must be in the same Region as your fleet. To look up a VPC ID, use the VPC Dashboard (https://console.aws.amazon.com/vpc/) in the Amazon Web Services Management Console. Learn more about VPC peering in VPC Peering with Amazon GameLift Fleets (https://docs.aws.amazon.com/gamelift/latest/developerguide/vpc-peering.html).
+  --fleet-type: string@fleet-type-completer # Indicates whether to use On-Demand or Spot instances for this fleet. By default, this property is set to ON_DEMAND. Learn more about when to use On-Demand versus Spot Instances (https://docs.aws.amazon.com/gamelift/latest/developerguide/gamelift-ec2-instances.html#gamelift-ec2-instances-spot). This property cannot be changed after the fleet is created.
+  --instance-role-arn: string # A unique identifier for an IAM role that manages access to your Amazon Web Services services. With an instance role ARN set, any application that runs on an instance in this fleet can assume the role, including install scripts, server processes, and daemons (background processes). Create a role or look up a role's ARN by using the IAM dashboard (https://console.aws.amazon.com/iam/) in the Amazon Web Services Management Console. Learn more about using on-box credentials for your game servers at Access external resources from a game server (https://docs.aws.amazon.com/gamelift/latest/developerguide/gamelift-sdk-server-resources.html). This property cannot be changed after the fleet is created.
+  --certificate-configuration: record # Determines whether a TLS/SSL certificate is generated for a fleet. This feature must be enabled when creating the fleet. All instances in a fleet share the same certificate. The certificate can be retrieved by calling the Amazon GameLift Server SDK (https://docs.aws.amazon.com/gamelift/latest/developerguide/reference-serversdk.html) operation GetInstanceCertificate. — shape: {CertificateType: "DISABLED"|"GENERATED"}
+  --locations: list # A set of remote locations to deploy additional instances to and manage as part of the fleet. This parameter can only be used when creating fleets in Amazon Web Services Regions that support multiple locations. You can add any Amazon GameLift-supported Amazon Web Services Region as a remote location, in the form of an Amazon Web Services Region code such as us-west-2. To create a fleet with instances in the home Region only, don't use this parameter. To use this parameter, Amazon GameLift requires you to use your home location in the request. — item shape: {Location: string}
+  --tags: list # A list of labels to assign to the new fleet resource. Tags are developer-defined key-value pairs. Tagging Amazon Web Services resources are useful for resource management, access management and cost allocation. For more information, see Tagging Amazon Web Services Resources (https://docs.aws.amazon.com/general/latest/gr/aws_tagging.html) in the Amazon Web Services General Reference. — item shape: {Key: string, Value: string}
+  --compute-type: string@compute-type-completer # The type of compute resource used to host your game servers. You can use your own compute resources with Amazon GameLift Anywhere or use Amazon EC2 instances with managed Amazon GameLift. By default, this property is set to EC2.
+  --anywhere-configuration: record # Amazon GameLift Anywhere configuration options for your Anywhere fleets. — shape: {Cost: string}
+]: any -> oneof<record<FleetAttributes: record<FleetId: string, FleetArn: string, FleetType: string, InstanceType: string, Description: string, Name: string, CreationTime: string, TerminationTime: string, Status: string, BuildId: string, BuildArn: string, ScriptId: string, ScriptArn: string, ServerLaunchPath: string, ServerLaunchParameters: string, LogPaths: list<string>, NewGameSessionProtectionPolicy: string, OperatingSystem: string, ResourceCreationLimitPolicy: record<NewGameSessionsPerCreator: int, PolicyPeriodInMinutes: int>, MetricGroups: list<string>, StoppedActions: list<string>, InstanceRoleArn: string, CertificateConfiguration: record<CertificateType: string>, ComputeType: string, AnywhereConfiguration: record<Cost: string>>, LocationStates: table<Location: string, Status: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "GameLift.CreateFleet")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Name": $name, "Description": $description, "BuildId": $build_id, "ScriptId": $script_id, "ServerLaunchPath": $server_launch_path, "ServerLaunchParameters": $server_launch_parameters, "LogPaths": $log_paths, "EC2InstanceType": $ec2_instance_type, "EC2InboundPermissions": $ec2_inbound_permissions, "NewGameSessionProtectionPolicy": $new_game_session_protection_policy, "RuntimeConfiguration": $runtime_configuration, "ResourceCreationLimitPolicy": $resource_creation_limit_policy, "MetricGroups": $metric_groups, "PeerVpcAwsAccountId": $peer_vpc_aws_account_id, "PeerVpcId": $peer_vpc_id, "FleetType": $fleet_type, "InstanceRoleArn": $instance_role_arn, "CertificateConfiguration": $certificate_configuration, "Locations": $locations, "Tags": $tags, "ComputeType": $compute_type, "AnywhereConfiguration": $anywhere_configuration} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -518,13 +569,14 @@ export def "create-fleet-locations" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-5
-  fleet_id: any
-  locations: any
-]: any -> record<FleetId: record, FleetArn: record, LocationStates: record> {
+  --x-amz-target: string@x-amz-target-completer-5 # required
+  fleet_id: string # A unique identifier for the fleet to add locations to. You can use either the fleet ID or ARN value.
+  locations: list # A list of locations to deploy additional instances to and manage as part of the fleet. You can add any Amazon GameLift-supported Amazon Web Services Region as a remote location, in the form of an Amazon Web Services Region code such as us-west-2. — item shape: {Location: string}
+]: any -> oneof<record<FleetId: string, FleetArn: string, LocationStates: table<Location: string, Status: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "GameLift.CreateFleetLocations")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"FleetId": $fleet_id, "Locations": $locations} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -567,22 +619,23 @@ export def "create-game-server-group" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-6
-  game_server_group_name: any
-  role_arn: any
-  min_size: any
-  max_size: any
-  launch_template: any
-  instance_definitions: any
-  --auto-scaling-policy: any
-  --balancing-strategy: any
-  --game-server-protection-policy: any
-  --vpc-subnets: any
-  --tags: any
-]: any -> record<GameServerGroup: record<GameServerGroupName: record, GameServerGroupArn: record, RoleArn: record, InstanceDefinitions: record, BalancingStrategy: record, GameServerProtectionPolicy: record, AutoScalingGroupArn: record, Status: record, StatusReason: record, SuspendedActions: record, CreationTime: record, LastUpdatedTime: record>> {
+  --x-amz-target: string@x-amz-target-completer-6 # required
+  game_server_group_name: string # An identifier for the new game server group. This value is used to generate unique ARN identifiers for the Amazon EC2 Auto Scaling group and the Amazon GameLift FleetIQ game server group. The name must be unique per Region per Amazon Web Services account.
+  role_arn: string # The Amazon Resource Name (ARN (https://docs.aws.amazon.com/AmazonS3/latest/dev/s3-arn-format.html)) for an IAM role that allows Amazon GameLift to access your Amazon EC2 Auto Scaling groups.
+  min_size: int # The minimum number of instances allowed in the Amazon EC2 Auto Scaling group. During automatic scaling events, Amazon GameLift FleetIQ and Amazon EC2 do not scale down the group below this minimum. In production, this value should be set to at least 1. After the Auto Scaling group is created, update this value directly in the Auto Scaling group using the Amazon Web Services console or APIs.
+  max_size: int # The maximum number of instances allowed in the Amazon EC2 Auto Scaling group. During automatic scaling events, Amazon GameLift FleetIQ and EC2 do not scale up the group above this maximum. After the Auto Scaling group is created, update this value directly in the Auto Scaling group using the Amazon Web Services console or APIs.
+  launch_template: record # This data type is used with the Amazon GameLift FleetIQ and game server groups. An Amazon Elastic Compute Cloud launch template that contains configuration settings and game server code to be deployed to all instances in a game server group. The launch template is specified when creating a new game server group. — shape: {LaunchTemplateId?: string, LaunchTemplateName?: string, Version?: string}
+  instance_definitions: list # The Amazon EC2 instance types and sizes to use in the Auto Scaling group. The instance definitions must specify at least two different instance types that are supported by Amazon GameLift FleetIQ. For more information on instance types, see EC2 Instance Types (https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/instance-types.html) in the Amazon Elastic Compute Cloud User Guide. You can optionally specify capacity weighting for each instance type. If no weight value is specified for an instance type, it is set to the default value "1". For more information about capacity weighting, see Instance Weighting for Amazon EC2 Auto Scaling (https://docs.aws.amazon.com/autoscaling/ec2/userguide/asg-instance-weighting.html) in the Amazon EC2 Auto Scaling User Guide. — item shape: {InstanceType: "c4.large"|"c4.xlarge"|"c4.2xlarge"|"c4.4xlarge"|"c4.8xlarge"|"c5.large"|"c5.xlarge"|"c5.2xlarge"|"c5.4xlarge"|"c5.9xlarge"|"c5.12xlarge"|"c5.18xlarge"|"c5.24xlarge"|"c5a.large"|"c5a.xlarge"|"c5a.2xlarge"|"c5a.4xlarge"|"c5a.8xlarge"|"c5a.12xlarge"|"c5a.16xlarge"|"c5a.24xlarge"|"c6g.medium"|"c6g.large"|"c6g.xlarge"|"c6g.2xlarge"|"c6g.4xlarge"|"c6g.8xlarge"|"c6g.12xlarge"|"c6g.16xlarge"|"r4.large"|"r4.xlarge"|"r4.2xlarge"|"r4.4xlarge"|"r4.8xlarge"|"r4.16xlarge"|"r5.large"|"r5.xlarge"|"r5.2xlarge"|"r5.4xlarge"|"r5.8xlarge"|"r5.12xlarge"|"r5.16xlarge"|"r5.24xlarge"|"r5a.large"|"r5a.xlarge"|"r5a.2xlarge"|"r5a.4xlarge"|"r5a.8xlarge"|"r5a.12xlarge"|"r5a.16xlarge"|"r5a.24xlarge"|"r6g.medium"|"r6g.large"|"r6g.xlarge"|"r6g.2xlarge"|"r6g.4xlarge"|"r6g.8xlarge"|"r6g.12xlarge"|"r6g.16xlarge"|"m4.large"|"m4.xlarge"|"m4.2xlarge"|"m4.4xlarge"|"m4.10xlarge"|"m5.large"|"m5.xlarge"|"m5.2xlarge"|"m5.4xlarge"|"m5.8xlarge"|"m5.12xlarge"|"m5.16xlarge"|"m5.24xlarge"|"m5a.large"|"m5a.xlarge"|"m5a.2xlarge"|"m5a.4xlarge"|"m5a.8xlarge"|"m5a.12xlarge"|"m5a.16xlarge"|"m5a.24xlarge"|"m6g.medium"|"m6g.large"|"m6g.xlarge"|"m6g.2xlarge"|"m6g.4xlarge"|"m6g.8xlarge"|"m6g.12xlarge"|"m6g.16xlarge", ... (1 more fields)}
+  --auto-scaling-policy: record # This data type is used with the Amazon GameLift FleetIQ and game server groups. Configuration settings for intelligent automatic scaling that uses target tracking. These settings are used to add an Auto Scaling policy when creating the corresponding Auto Scaling group. After the Auto Scaling group is created, all updates to Auto Scaling policies, including changing this policy and adding or removing other policies, is done directly on the Auto Scaling group. — shape: {EstimatedInstanceWarmup?: int, TargetTrackingConfiguration: record}
+  --balancing-strategy: string@balancing-strategy-completer # Indicates how Amazon GameLift FleetIQ balances the use of Spot Instances and On-Demand Instances in the game server group. Method options include the following: SPOT_ONLY - Only Spot Instances are used in the game server group. If Spot Instances are unavailable or not viable for game hosting, the game server group provides no hosting capacity until Spot Instances can again be used. Until then, no new instances are started, and the existing nonviable Spot Instances are terminated (after current gameplay ends) and are not replaced. SPOT_PREFERRED - (default value) Spot Instances are used whenever available in the game server group. If Spot Instances are unavailable, the game server group continues to provide hosting capacity by falling back to On-Demand Instances. Existing nonviable Spot Instances are terminated (after current gameplay ends) and are replaced with new On-Demand Instances. ON_DEMAND_ONLY - Only On-Demand Instances are used in the game server group. No Spot Instances are used, even when available, while this balancing strategy is in force.
+  --game-server-protection-policy: string@game-server-protection-policy-completer # A flag that indicates whether instances in the game server group are protected from early termination. Unprotected instances that have active game servers running might be terminated during a scale-down event, causing players to be dropped from the game. Protected instances cannot be terminated while there are active game servers running except in the event of a forced game server group deletion (see ). An exception to this is with Spot Instances, which can be terminated by Amazon Web Services regardless of protection status. This property is set to NO_PROTECTION by default.
+  --vpc-subnets: list<string> # A list of virtual private cloud (VPC) subnets to use with instances in the game server group. By default, all Amazon GameLift FleetIQ-supported Availability Zones are used. You can use this parameter to specify VPCs that you've set up. This property cannot be updated after the game server group is created, and the corresponding Auto Scaling group will always use the property value that is set with this request, even if the Auto Scaling group is updated directly.
+  --tags: list # A list of labels to assign to the new game server group resource. Tags are developer-defined key-value pairs. Tagging Amazon Web Services resources is useful for resource management, access management, and cost allocation. For more information, see Tagging Amazon Web Services Resources (https://docs.aws.amazon.com/general/latest/gr/aws_tagging.html) in the Amazon Web Services General Reference. — item shape: {Key: string, Value: string}
+]: any -> oneof<record<GameServerGroup: record<GameServerGroupName: string, GameServerGroupArn: string, RoleArn: string, InstanceDefinitions: list<record>, BalancingStrategy: string, GameServerProtectionPolicy: string, AutoScalingGroupArn: string, Status: string, StatusReason: string, SuspendedActions: list<string>, CreationTime: string, LastUpdatedTime: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "GameLift.CreateGameServerGroup")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"GameServerGroupName": $game_server_group_name, "RoleArn": $role_arn, "MinSize": $min_size, "MaxSize": $max_size, "LaunchTemplate": $launch_template, "InstanceDefinitions": $instance_definitions, "AutoScalingPolicy": $auto_scaling_policy, "BalancingStrategy": $balancing_strategy, "GameServerProtectionPolicy": $game_server_protection_policy, "VpcSubnets": $vpc_subnets, "Tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -625,21 +678,22 @@ export def "create-game-session" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-7
-  --fleet-id: any
-  --alias-id: any
-  maximum_player_session_count: any
-  --name: any
-  --game-properties: any
-  --creator-id: any
-  --game-session-id: any
-  --idempotency-token: any
-  --game-session-data: any
-  --location: any
-]: any -> record<GameSession: record<GameSessionId: record, Name: record, FleetId: record, FleetArn: record, CreationTime: record, TerminationTime: record, CurrentPlayerSessionCount: record, MaximumPlayerSessionCount: record, Status: record, StatusReason: record, GameProperties: record, IpAddress: record, DnsName: record, Port: record, PlayerSessionCreationPolicy: record, CreatorId: record, GameSessionData: record, MatchmakerData: record, Location: record>> {
+  --x-amz-target: string@x-amz-target-completer-7 # required
+  --fleet-id: string # A unique identifier for the fleet to create a game session in. You can use either the fleet ID or ARN value. Each request must reference either a fleet ID or alias ID, but not both.
+  --alias-id: string # A unique identifier for the alias associated with the fleet to create a game session in. You can use either the alias ID or ARN value. Each request must reference either a fleet ID or alias ID, but not both.
+  maximum_player_session_count: int # The maximum number of players that can be connected simultaneously to the game session.
+  --name: string # A descriptive label that is associated with a game session. Session names do not need to be unique.
+  --game-properties: list # A set of custom properties for a game session, formatted as key:value pairs. These properties are passed to a game server process with a request to start a new game session (see Start a Game Session (https://docs.aws.amazon.com/gamelift/latest/developerguide/gamelift-sdk-server-api.html#gamelift-sdk-server-startsession)). — item shape: {Key: string, Value: string}
+  --creator-id: string # A unique identifier for a player or entity creating the game session. If you add a resource creation limit policy to a fleet, the CreateGameSession operation requires a CreatorId. Amazon GameLift limits the number of game session creation requests with the same CreatorId in a specified time period. If you your fleet doesn't have a resource creation limit policy and you provide a CreatorId in your CreateGameSession requests, Amazon GameLift limits requests to one request per CreatorId per second. To not limit CreateGameSession requests with the same CreatorId, don't provide a CreatorId in your CreateGameSession request.
+  --game-session-id: string # This parameter is deprecated. Use IdempotencyToken instead. Custom string that uniquely identifies a request for a new game session. Maximum token length is 48 characters. If provided, this string is included in the new game session's ID.
+  --idempotency-token: string # Custom string that uniquely identifies the new game session request. This is useful for ensuring that game session requests with the same idempotency token are processed only once. Subsequent requests with the same string return the original GameSession object, with an updated status. Maximum token length is 48 characters. If provided, this string is included in the new game session's ID. A game session ARN has the following format: arn:aws:gamelift:<region>::gamesession/<fleet ID>/<custom ID string or idempotency token>. Idempotency tokens remain in use for 30 days after a game session has ended; game session objects are retained for this time period and then deleted.
+  --game-session-data: string # A set of custom game session properties, formatted as a single string value. This data is passed to a game server process with a request to start a new game session (see Start a Game Session (https://docs.aws.amazon.com/gamelift/latest/developerguide/gamelift-sdk-server-api.html#gamelift-sdk-server-startsession)).
+  --location: string # A fleet's remote location to place the new game session in. If this parameter is not set, the new game session is placed in the fleet's home Region. Specify a remote location with an Amazon Web Services Region code such as us-west-2.
+]: any -> oneof<record<GameSession: record<GameSessionId: string, Name: string, FleetId: string, FleetArn: string, CreationTime: string, TerminationTime: string, CurrentPlayerSessionCount: int, MaximumPlayerSessionCount: int, Status: string, StatusReason: string, GameProperties: list<record>, IpAddress: string, DnsName: string, Port: int, PlayerSessionCreationPolicy: string, CreatorId: string, GameSessionData: string, MatchmakerData: string, Location: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "GameLift.CreateGameSession")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"FleetId": $fleet_id, "AliasId": $alias_id, "MaximumPlayerSessionCount": $maximum_player_session_count, "Name": $name, "GameProperties": $game_properties, "CreatorId": $creator_id, "GameSessionId": $game_session_id, "IdempotencyToken": $idempotency_token, "GameSessionData": $game_session_data, "Location": $location} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -682,20 +736,21 @@ export def "create-game-session-queue" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-8
-  name: any
-  --timeout-in-seconds: any
-  --player-latency-policies: any
-  --destinations: any
-  --filter-configuration: any
-  --priority-configuration: any
-  --custom-event-data: any
-  --notification-target: any
-  --tags: any
-]: any -> record<GameSessionQueue: record<Name: record, GameSessionQueueArn: record, TimeoutInSeconds: record, PlayerLatencyPolicies: record, Destinations: record, FilterConfiguration: record<AllowedLocations: record>, PriorityConfiguration: record<PriorityOrder: record, LocationOrder: record>, CustomEventData: record, NotificationTarget: record>> {
+  --x-amz-target: string@x-amz-target-completer-8 # required
+  name: string # A descriptive label that is associated with game session queue. Queue names must be unique within each Region.
+  --timeout-in-seconds: int # The maximum time, in seconds, that a new game session placement request remains in the queue. When a request exceeds this time, the game session placement changes to a TIMED_OUT status.
+  --player-latency-policies: list # A set of policies that act as a sliding cap on player latency. FleetIQ works to deliver low latency for most players in a game session. These policies ensure that no individual player can be placed into a game with unreasonably high latency. Use multiple policies to gradually relax latency requirements a step at a time. Multiple policies are applied based on their maximum allowed latency, starting with the lowest value. — item shape: {MaximumIndividualPlayerLatencyMilliseconds?: int, PolicyDurationSeconds?: int}
+  --destinations: list # A list of fleets and/or fleet aliases that can be used to fulfill game session placement requests in the queue. Destinations are identified by either a fleet ARN or a fleet alias ARN, and are listed in order of placement preference. — item shape: {DestinationArn?: string}
+  --filter-configuration: record # A list of fleet locations where a game session queue can place new game sessions. You can use a filter to temporarily turn off placements for specific locations. For queues that have multi-location fleets, you can use a filter configuration allow placement with some, but not all of these locations. — shape: {AllowedLocations?: list<string>}
+  --priority-configuration: record # Custom prioritization settings for use by a game session queue when placing new game sessions with available game servers. When defined, this configuration replaces the default FleetIQ prioritization process, which is as follows: If player latency data is included in a game session request, destinations and locations are prioritized first based on lowest average latency (1), then on lowest hosting cost (2), then on destination list order (3), and finally on location (alphabetical) (4). This approach ensures that the queue's top priority is to place game sessions where average player latency is lowest, and--if latency is the same--where the hosting cost is less, etc. If player latency data is not included, destinations and locations are prioritized first on destination list order (1), and then on location (alphabetical) (2). This approach ensures that the queue's top priority is to place game sessions on the first destination fleet listed. If that fleet has multiple locations, the game session is placed on the first location (when listed alphabetically). Changing the priority order will affect how game sessions are placed. — shape: {PriorityOrder?: list<string>, LocationOrder?: list<string>}
+  --custom-event-data: string # Information to be added to all events that are related to this game session queue.
+  --notification-target: string # An SNS topic ARN that is set up to receive game session placement notifications. See Setting up notifications for game session placement (https://docs.aws.amazon.com/gamelift/latest/developerguide/queue-notification.html).
+  --tags: list # A list of labels to assign to the new game session queue resource. Tags are developer-defined key-value pairs. Tagging Amazon Web Services resources are useful for resource management, access management and cost allocation. For more information, see Tagging Amazon Web Services Resources (https://docs.aws.amazon.com/general/latest/gr/aws_tagging.html) in the Amazon Web Services General Reference. — item shape: {Key: string, Value: string}
+]: any -> oneof<record<GameSessionQueue: record<Name: string, GameSessionQueueArn: string, TimeoutInSeconds: int, PlayerLatencyPolicies: list<record>, Destinations: list<record>, FilterConfiguration: record<AllowedLocations: list>, PriorityConfiguration: record<PriorityOrder: list, LocationOrder: list>, CustomEventData: string, NotificationTarget: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "GameLift.CreateGameSessionQueue")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Name": $name, "TimeoutInSeconds": $timeout_in_seconds, "PlayerLatencyPolicies": $player_latency_policies, "Destinations": $destinations, "FilterConfiguration": $filter_configuration, "PriorityConfiguration": $priority_configuration, "CustomEventData": $custom_event_data, "NotificationTarget": $notification_target, "Tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -738,13 +793,14 @@ export def "create-location" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-9
-  location_name: any
-  --tags: any
-]: any -> record<Location: record<LocationName: record, LocationArn: record>> {
+  --x-amz-target: string@x-amz-target-completer-9 # required
+  location_name: string # A descriptive name for the custom location.
+  --tags: list # A list of labels to assign to the new matchmaking configuration resource. Tags are developer-defined key-value pairs. Tagging Amazon Web Services resources are useful for resource management, access management and cost allocation. For more information, see Tagging Amazon Web Services Resources (https://docs.aws.amazon.com/general/latest/gr/aws_tagging.html) in the Amazon Web Services General Rareference. — item shape: {Key: string, Value: string}
+]: any -> oneof<record<Location: record<LocationName: string, LocationArn: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "GameLift.CreateLocation")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"LocationName": $location_name, "Tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -787,29 +843,31 @@ export def "create-matchmaking-configuration" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-10
-  name: any
-  --description: any
-  --game-session-queue-arns: any
-  request_timeout_seconds: any
-  --acceptance-timeout-seconds: any
-  acceptance_required: any
-  rule_set_name: any
-  --notification-target: any
-  --additional-player-count: any
-  --custom-event-data: any
-  --game-properties: any
-  --game-session-data: any
-  --backfill-mode: any
-  --flex-match-mode: any
-  --tags: any
-]: any -> record<Configuration: record<Name: record, ConfigurationArn: record, Description: record, GameSessionQueueArns: record, RequestTimeoutSeconds: record, AcceptanceTimeoutSeconds: record, AcceptanceRequired: record, RuleSetName: record, RuleSetArn: record, NotificationTarget: record, AdditionalPlayerCount: record, CustomEventData: record, CreationTime: record, GameProperties: record, GameSessionData: record, BackfillMode: record, FlexMatchMode: record>> {
+  --x-amz-target: string@x-amz-target-completer-10 # required
+  name: string # A unique identifier for the matchmaking configuration. This name is used to identify the configuration associated with a matchmaking request or ticket.
+  --description: string # A human-readable description of the matchmaking configuration.
+  --game-session-queue-arns: list<string> # The Amazon Resource Name (ARN (https://docs.aws.amazon.com/AmazonS3/latest/dev/s3-arn-format.html)) that is assigned to a Amazon GameLift game session queue resource and uniquely identifies it. ARNs are unique across all Regions. Format is arn:aws:gamelift:<region>::gamesessionqueue/<queue name>. Queues can be located in any Region. Queues are used to start new Amazon GameLift-hosted game sessions for matches that are created with this matchmaking configuration. If FlexMatchMode is set to STANDALONE, do not set this parameter.
+  request_timeout_seconds: int # The maximum duration, in seconds, that a matchmaking ticket can remain in process before timing out. Requests that fail due to timing out can be resubmitted as needed.
+  --acceptance-timeout-seconds: int # The length of time (in seconds) to wait for players to accept a proposed match, if acceptance is required.
+  --acceptance-required: oneof<nothing, bool> # A flag that determines whether a match that was created with this configuration must be accepted by the matched players. To require acceptance, set to TRUE. With this option enabled, matchmaking tickets use the status REQUIRES_ACCEPTANCE to indicate when a completed potential match is waiting for player acceptance.
+  rule_set_name: string # A unique identifier for the matchmaking rule set to use with this configuration. You can use either the rule set name or ARN value. A matchmaking configuration can only use rule sets that are defined in the same Region.
+  --notification-target: string # An SNS topic ARN that is set up to receive matchmaking notifications. See Setting up notifications for matchmaking (https://docs.aws.amazon.com/gamelift/latest/flexmatchguide/match-notification.html) for more information.
+  --additional-player-count: int # The number of player slots in a match to keep open for future players. For example, if the configuration's rule set specifies a match for a single 12-person team, and the additional player count is set to 2, only 10 players are selected for the match. This parameter is not used if FlexMatchMode is set to STANDALONE.
+  --custom-event-data: string # Information to be added to all events related to this matchmaking configuration.
+  --game-properties: list # A set of custom properties for a game session, formatted as key:value pairs. These properties are passed to a game server process with a request to start a new game session (see Start a Game Session (https://docs.aws.amazon.com/gamelift/latest/developerguide/gamelift-sdk-server-api.html#gamelift-sdk-server-startsession)). This information is added to the new GameSession object that is created for a successful match. This parameter is not used if FlexMatchMode is set to STANDALONE. — item shape: {Key: string, Value: string}
+  --game-session-data: string # A set of custom game session properties, formatted as a single string value. This data is passed to a game server process with a request to start a new game session (see Start a Game Session (https://docs.aws.amazon.com/gamelift/latest/developerguide/gamelift-sdk-server-api.html#gamelift-sdk-server-startsession)). This information is added to the new GameSession object that is created for a successful match. This parameter is not used if FlexMatchMode is set to STANDALONE.
+  --backfill-mode: string@backfill-mode-completer # The method used to backfill game sessions that are created with this matchmaking configuration. Specify MANUAL when your game manages backfill requests manually or does not use the match backfill feature. Specify AUTOMATIC to have Amazon GameLift create a backfill request whenever a game session has one or more open slots. Learn more about manual and automatic backfill in Backfill Existing Games with FlexMatch (https://docs.aws.amazon.com/gamelift/latest/flexmatchguide/match-backfill.html). Automatic backfill is not available when FlexMatchMode is set to STANDALONE.
+  --flex-match-mode: string@flex-match-mode-completer # Indicates whether this matchmaking configuration is being used with Amazon GameLift hosting or as a standalone matchmaking solution. STANDALONE - FlexMatch forms matches and returns match information, including players and team assignments, in a MatchmakingSucceeded (https://docs.aws.amazon.com/gamelift/latest/flexmatchguide/match-events.html#match-events-matchmakingsucceeded) event. WITH_QUEUE - FlexMatch forms matches and uses the specified Amazon GameLift queue to start a game session for the match.
+  --tags: list # A list of labels to assign to the new matchmaking configuration resource. Tags are developer-defined key-value pairs. Tagging Amazon Web Services resources are useful for resource management, access management and cost allocation. For more information, see Tagging Amazon Web Services Resources (https://docs.aws.amazon.com/general/latest/gr/aws_tagging.html) in the Amazon Web Services General Reference. — item shape: {Key: string, Value: string}
+]: any -> oneof<record<Configuration: record<Name: string, ConfigurationArn: string, Description: string, GameSessionQueueArns: list<string>, RequestTimeoutSeconds: int, AcceptanceTimeoutSeconds: int, AcceptanceRequired: bool, RuleSetName: string, RuleSetArn: string, NotificationTarget: string, AdditionalPlayerCount: int, CustomEventData: string, CreationTime: string, GameProperties: list<record>, GameSessionData: string, BackfillMode: string, FlexMatchMode: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "GameLift.CreateMatchmakingConfiguration")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Name": $name, "Description": $description, "GameSessionQueueArns": $game_session_queue_arns, "RequestTimeoutSeconds": $request_timeout_seconds, "AcceptanceTimeoutSeconds": $acceptance_timeout_seconds, "AcceptanceRequired": $acceptance_required, "RuleSetName": $rule_set_name, "NotificationTarget": $notification_target, "AdditionalPlayerCount": $additional_player_count, "CustomEventData": $custom_event_data, "GameProperties": $game_properties, "GameSessionData": $game_session_data, "BackfillMode": $backfill_mode, "FlexMatchMode": $flex_match_mode, "Tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "AcceptanceRequired") == null) { error make --unspanned { msg: "required body field 'AcceptanceRequired' missing: pass --acceptance-required or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
@@ -849,14 +907,15 @@ export def "create-matchmaking-rule-set" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-11
-  name: any
-  rule_set_body: any
-  --tags: any
-]: any -> record<RuleSet: record<RuleSetName: record, RuleSetArn: record, RuleSetBody: record, CreationTime: record>> {
+  --x-amz-target: string@x-amz-target-completer-11 # required
+  name: string # A unique identifier for the matchmaking rule set. A matchmaking configuration identifies the rule set it uses by this name value. Note that the rule set name is different from the optional name field in the rule set body.
+  rule_set_body: string # A collection of matchmaking rules, formatted as a JSON string. Comments are not allowed in JSON, but most elements support a description field.
+  --tags: list # A list of labels to assign to the new matchmaking rule set resource. Tags are developer-defined key-value pairs. Tagging Amazon Web Services resources are useful for resource management, access management and cost allocation. For more information, see Tagging Amazon Web Services Resources (https://docs.aws.amazon.com/general/latest/gr/aws_tagging.html) in the Amazon Web Services General Reference. — item shape: {Key: string, Value: string}
+]: any -> oneof<record<RuleSet: record<RuleSetName: string, RuleSetArn: string, RuleSetBody: string, CreationTime: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "GameLift.CreateMatchmakingRuleSet")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Name": $name, "RuleSetBody": $rule_set_body, "Tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -899,14 +958,15 @@ export def "create-player-session" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-12
-  game_session_id: any
-  player_id: any
-  --player-data: any
-]: any -> record<PlayerSession: record<PlayerSessionId: record, PlayerId: record, GameSessionId: record, FleetId: record, FleetArn: record, CreationTime: record, TerminationTime: record, Status: record, IpAddress: record, DnsName: record, Port: record, PlayerData: record>> {
+  --x-amz-target: string@x-amz-target-completer-12 # required
+  game_session_id: string # A unique identifier for the game session to add a player to.
+  player_id: string # A unique identifier for a player. Player IDs are developer-defined.
+  --player-data: string # Developer-defined information related to a player. Amazon GameLift does not use this data, so it can be formatted as needed for use in the game.
+]: any -> oneof<record<PlayerSession: record<PlayerSessionId: string, PlayerId: string, GameSessionId: string, FleetId: string, FleetArn: string, CreationTime: string, TerminationTime: string, Status: string, IpAddress: string, DnsName: string, Port: int, PlayerData: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "GameLift.CreatePlayerSession")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"GameSessionId": $game_session_id, "PlayerId": $player_id, "PlayerData": $player_data} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -949,14 +1009,15 @@ export def "create-player-sessions" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-13
-  game_session_id: any
-  player_ids: any
-  --player-data-map: any
-]: any -> record<PlayerSessions: record> {
+  --x-amz-target: string@x-amz-target-completer-13 # required
+  game_session_id: string # A unique identifier for the game session to add players to.
+  player_ids: list<string> # List of unique identifiers for the players to be added.
+  --player-data-map: record # Map of string pairs, each specifying a player ID and a set of developer-defined information related to the player. Amazon GameLift does not use this data, so it can be formatted as needed for use in the game. Any player data strings for player IDs that are not included in the PlayerIds parameter are ignored.
+]: any -> oneof<record<PlayerSessions: table<PlayerSessionId: string, PlayerId: string, GameSessionId: string, FleetId: string, FleetArn: string, CreationTime: string, TerminationTime: string, Status: string, IpAddress: string, DnsName: string, Port: int, PlayerData: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "GameLift.CreatePlayerSessions")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"GameSessionId": $game_session_id, "PlayerIds": $player_ids, "PlayerDataMap": $player_data_map} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -999,16 +1060,17 @@ export def "create-script" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-14
-  --name: any
-  --version: any
-  --storage-location: any
-  --zip-file: any
-  --tags: any
-]: any -> record<Script: record<ScriptId: record, ScriptArn: record, Name: record, Version: record, SizeOnDisk: record, CreationTime: record, StorageLocation: record<Bucket: record, Key: record, RoleArn: record, ObjectVersion: record>>> {
+  --x-amz-target: string@x-amz-target-completer-14 # required
+  --name: string # A descriptive label that is associated with a script. Script names don't need to be unique. You can use UpdateScript (https://docs.aws.amazon.com/gamelift/latest/apireference/API_UpdateScript.html) to change this value later.
+  --version: string # Version information associated with a build or script. Version strings don't need to be unique. You can use UpdateScript (https://docs.aws.amazon.com/gamelift/latest/apireference/API_UpdateScript.html) to change this value later.
+  --storage-location: record # The location in Amazon S3 where build or script files are stored for access by Amazon GameLift. — shape: {Bucket?: string, Key?: string, RoleArn?: string, ObjectVersion?: string}
+  --zip-file: string # A data object containing your Realtime scripts and dependencies as a zip file. The zip file can have one or multiple files. Maximum size of a zip file is 5 MB. When using the Amazon Web Services CLI tool to create a script, this parameter is set to the zip file name. It must be prepended with the string "fileb://" to indicate that the file data is a binary object. For example: --zip-file fileb://myRealtimeScript.zip.
+  --tags: list # A list of labels to assign to the new script resource. Tags are developer-defined key-value pairs. Tagging Amazon Web Services resources are useful for resource management, access management and cost allocation. For more information, see Tagging Amazon Web Services Resources (https://docs.aws.amazon.com/general/latest/gr/aws_tagging.html) in the Amazon Web Services General Reference. Once the resource is created, you can use TagResource (https://docs.aws.amazon.com/gamelift/latest/apireference/API_TagResource.html), UntagResource (https://docs.aws.amazon.com/gamelift/latest/apireference/API_UntagResource.html), and ListTagsForResource (https://docs.aws.amazon.com/gamelift/latest/apireference/API_ListTagsForResource.html) to add, remove, and view tags. The maximum tag limit may be lower than stated. See the Amazon Web Services General Reference for actual tagging limits. — item shape: {Key: string, Value: string}
+]: any -> oneof<record<Script: record<ScriptId: string, ScriptArn: string, Name: string, Version: string, SizeOnDisk: int, CreationTime: string, StorageLocation: record<Bucket: string, Key: string, RoleArn: string, ObjectVersion: string>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "GameLift.CreateScript")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Name": $name, "Version": $version, "StorageLocation": $storage_location, "ZipFile": $zip_file, "Tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1051,13 +1113,14 @@ export def "create-vpc-peering-authorization" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-15
-  game_lift_aws_account_id: any
-  peer_vpc_id: any
-]: any -> record<VpcPeeringAuthorization: record<GameLiftAwsAccountId: record, PeerVpcAwsAccountId: record, PeerVpcId: record, CreationTime: record, ExpirationTime: record>> {
+  --x-amz-target: string@x-amz-target-completer-15 # required
+  game_lift_aws_account_id: string # A unique identifier for the Amazon Web Services account that you use to manage your Amazon GameLift fleet. You can find your Account ID in the Amazon Web Services Management Console under account settings.
+  peer_vpc_id: string # A unique identifier for a VPC with resources to be accessed by your Amazon GameLift fleet. The VPC must be in the same Region as your fleet. To look up a VPC ID, use the VPC Dashboard (https://console.aws.amazon.com/vpc/) in the Amazon Web Services Management Console. Learn more about VPC peering in VPC Peering with Amazon GameLift Fleets (https://docs.aws.amazon.com/gamelift/latest/developerguide/vpc-peering.html).
+]: any -> oneof<record<VpcPeeringAuthorization: record<GameLiftAwsAccountId: string, PeerVpcAwsAccountId: string, PeerVpcId: string, CreationTime: string, ExpirationTime: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "GameLift.CreateVpcPeeringAuthorization")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"GameLiftAwsAccountId": $game_lift_aws_account_id, "PeerVpcId": $peer_vpc_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1100,14 +1163,15 @@ export def "create-vpc-peering-connection" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-16
-  fleet_id: any
-  peer_vpc_aws_account_id: any
-  peer_vpc_id: any
-]: any -> record {
+  --x-amz-target: string@x-amz-target-completer-16 # required
+  fleet_id: string # A unique identifier for the fleet. You can use either the fleet ID or ARN value. This tells Amazon GameLift which GameLift VPC to peer with.
+  peer_vpc_aws_account_id: string # A unique identifier for the Amazon Web Services account with the VPC that you want to peer your Amazon GameLift fleet with. You can find your Account ID in the Amazon Web Services Management Console under account settings.
+  peer_vpc_id: string # A unique identifier for a VPC with resources to be accessed by your Amazon GameLift fleet. The VPC must be in the same Region as your fleet. To look up a VPC ID, use the VPC Dashboard (https://console.aws.amazon.com/vpc/) in the Amazon Web Services Management Console. Learn more about VPC peering in VPC Peering with Amazon GameLift Fleets (https://docs.aws.amazon.com/gamelift/latest/developerguide/vpc-peering.html).
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "GameLift.CreateVpcPeeringConnection")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"FleetId": $fleet_id, "PeerVpcAwsAccountId": $peer_vpc_aws_account_id, "PeerVpcId": $peer_vpc_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1150,12 +1214,13 @@ export def "delete-alias" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-17
-  alias_id: any
+  --x-amz-target: string@x-amz-target-completer-17 # required
+  alias_id: string # A unique identifier of the alias that you want to delete. You can use either the alias ID or ARN value.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "GameLift.DeleteAlias")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"AliasId": $alias_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1198,12 +1263,13 @@ export def "delete-build" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-18
-  build_id: any
+  --x-amz-target: string@x-amz-target-completer-18 # required
+  build_id: string # A unique identifier for the build to delete. You can use either the build ID or ARN value.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "GameLift.DeleteBuild")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"BuildId": $build_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1246,12 +1312,13 @@ export def "delete-fleet" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-19
-  fleet_id: any
+  --x-amz-target: string@x-amz-target-completer-19 # required
+  fleet_id: string # A unique identifier for the fleet to be deleted. You can use either the fleet ID or ARN value.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "GameLift.DeleteFleet")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"FleetId": $fleet_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1294,13 +1361,14 @@ export def "delete-fleet-locations" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-20
-  fleet_id: any
-  locations: any
-]: any -> record<FleetId: record, FleetArn: record, LocationStates: record> {
+  --x-amz-target: string@x-amz-target-completer-20 # required
+  fleet_id: string # A unique identifier for the fleet to delete locations for. You can use either the fleet ID or ARN value.
+  locations: list<string> # The list of fleet locations to delete. Specify locations in the form of an Amazon Web Services Region code, such as us-west-2.
+]: any -> oneof<record<FleetId: string, FleetArn: string, LocationStates: table<Location: string, Status: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "GameLift.DeleteFleetLocations")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"FleetId": $fleet_id, "Locations": $locations} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1343,13 +1411,14 @@ export def "delete-game-server-group" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-21
-  game_server_group_name: any
-  --delete-option: any
-]: any -> record<GameServerGroup: record<GameServerGroupName: record, GameServerGroupArn: record, RoleArn: record, InstanceDefinitions: record, BalancingStrategy: record, GameServerProtectionPolicy: record, AutoScalingGroupArn: record, Status: record, StatusReason: record, SuspendedActions: record, CreationTime: record, LastUpdatedTime: record>> {
+  --x-amz-target: string@x-amz-target-completer-21 # required
+  game_server_group_name: string # A unique identifier for the game server group. Use either the name or ARN value.
+  --delete-option: string@delete-option-completer # The type of delete to perform. Options include the following: SAFE_DELETE – (default) Terminates the game server group and Amazon EC2 Auto Scaling group only when it has no game servers that are in UTILIZED status. FORCE_DELETE – Terminates the game server group, including all active game servers regardless of their utilization status, and the Amazon EC2 Auto Scaling group. RETAIN – Does a safe delete of the game server group but retains the Amazon EC2 Auto Scaling group as is.
+]: any -> oneof<record<GameServerGroup: record<GameServerGroupName: string, GameServerGroupArn: string, RoleArn: string, InstanceDefinitions: list<record>, BalancingStrategy: string, GameServerProtectionPolicy: string, AutoScalingGroupArn: string, Status: string, StatusReason: string, SuspendedActions: list<string>, CreationTime: string, LastUpdatedTime: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "GameLift.DeleteGameServerGroup")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"GameServerGroupName": $game_server_group_name, "DeleteOption": $delete_option} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1392,12 +1461,13 @@ export def "delete-game-session-queue" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-22
-  name: any
-]: any -> record {
+  --x-amz-target: string@x-amz-target-completer-22 # required
+  name: string # A descriptive label that is associated with game session queue. Queue names must be unique within each Region. You can use either the queue ID or ARN value.
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "GameLift.DeleteGameSessionQueue")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1440,12 +1510,13 @@ export def "delete-location" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-23
-  location_name: any
-]: any -> record {
+  --x-amz-target: string@x-amz-target-completer-23 # required
+  location_name: string # The location name of the custom location to be deleted.
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "GameLift.DeleteLocation")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"LocationName": $location_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1488,12 +1559,13 @@ export def "delete-matchmaking-configuration" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-24
-  name: any
-]: any -> record {
+  --x-amz-target: string@x-amz-target-completer-24 # required
+  name: string # A unique identifier for the matchmaking configuration. You can use either the configuration name or ARN value.
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "GameLift.DeleteMatchmakingConfiguration")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1536,12 +1608,13 @@ export def "delete-matchmaking-rule-set" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-25
-  name: any
-]: any -> record {
+  --x-amz-target: string@x-amz-target-completer-25 # required
+  name: string # A unique identifier for the matchmaking rule set to be deleted. (Note: The rule set name is different from the optional "name" field in the rule set body.) You can use either the rule set name or ARN value.
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "GameLift.DeleteMatchmakingRuleSet")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1584,13 +1657,14 @@ export def "delete-scaling-policy" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-26
-  name: any
-  fleet_id: any
+  --x-amz-target: string@x-amz-target-completer-26 # required
+  name: string # A descriptive label that is associated with a fleet's scaling policy. Policy names do not need to be unique.
+  fleet_id: string # A unique identifier for the fleet to be deleted. You can use either the fleet ID or ARN value.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "GameLift.DeleteScalingPolicy")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Name": $name, "FleetId": $fleet_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1633,12 +1707,13 @@ export def "delete-script" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-27
-  script_id: any
+  --x-amz-target: string@x-amz-target-completer-27 # required
+  script_id: string # A unique identifier for the Realtime script to delete. You can use either the script ID or ARN value.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "GameLift.DeleteScript")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ScriptId": $script_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1681,13 +1756,14 @@ export def "delete-vpc-peering-authorization" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-28
-  game_lift_aws_account_id: any
-  peer_vpc_id: any
-]: any -> record {
+  --x-amz-target: string@x-amz-target-completer-28 # required
+  game_lift_aws_account_id: string # A unique identifier for the Amazon Web Services account that you use to manage your Amazon GameLift fleet. You can find your Account ID in the Amazon Web Services Management Console under account settings.
+  peer_vpc_id: string # A unique identifier for a VPC with resources to be accessed by your Amazon GameLift fleet. The VPC must be in the same Region as your fleet. To look up a VPC ID, use the VPC Dashboard (https://console.aws.amazon.com/vpc/) in the Amazon Web Services Management Console. Learn more about VPC peering in VPC Peering with Amazon GameLift Fleets (https://docs.aws.amazon.com/gamelift/latest/developerguide/vpc-peering.html).
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "GameLift.DeleteVpcPeeringAuthorization")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"GameLiftAwsAccountId": $game_lift_aws_account_id, "PeerVpcId": $peer_vpc_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1730,13 +1806,14 @@ export def "delete-vpc-peering-connection" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-29
-  fleet_id: any
-  vpc_peering_connection_id: any
-]: any -> record {
+  --x-amz-target: string@x-amz-target-completer-29 # required
+  fleet_id: string # A unique identifier for the fleet. This fleet specified must match the fleet referenced in the VPC peering connection record. You can use either the fleet ID or ARN value.
+  vpc_peering_connection_id: string # A unique identifier for a VPC peering connection.
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "GameLift.DeleteVpcPeeringConnection")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"FleetId": $fleet_id, "VpcPeeringConnectionId": $vpc_peering_connection_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1779,13 +1856,14 @@ export def "deregister-compute" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-30
-  fleet_id: any
-  compute_name: any
-]: any -> record {
+  --x-amz-target: string@x-amz-target-completer-30 # required
+  fleet_id: string # >A unique identifier for the fleet the compute resource is registered to.
+  compute_name: string # The name of the compute resource you want to delete.
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "GameLift.DeregisterCompute")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"FleetId": $fleet_id, "ComputeName": $compute_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1828,13 +1906,14 @@ export def "deregister-game-server" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-31
-  game_server_group_name: any
-  game_server_id: any
+  --x-amz-target: string@x-amz-target-completer-31 # required
+  game_server_group_name: string # A unique identifier for the game server group where the game server is running.
+  game_server_id: string # A custom string that uniquely identifies the game server to deregister.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "GameLift.DeregisterGameServer")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"GameServerGroupName": $game_server_group_name, "GameServerId": $game_server_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1877,12 +1956,13 @@ export def "describe-alias" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-32
-  alias_id: any
-]: any -> record<Alias: record<AliasId: record, Name: record, AliasArn: record, Description: record, RoutingStrategy: record<Type: record, FleetId: record, Message: record>, CreationTime: record, LastUpdatedTime: record>> {
+  --x-amz-target: string@x-amz-target-completer-32 # required
+  alias_id: string # The unique identifier for the fleet alias that you want to retrieve. You can use either the alias ID or ARN value.
+]: any -> oneof<record<Alias: record<AliasId: string, Name: string, AliasArn: string, Description: string, RoutingStrategy: record<Type: string, FleetId: string, Message: string>, CreationTime: string, LastUpdatedTime: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "GameLift.DescribeAlias")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"AliasId": $alias_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1925,12 +2005,13 @@ export def "describe-build" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-33
-  build_id: any
-]: any -> record<Build: record<BuildId: record, BuildArn: record, Name: record, Version: record, Status: record, SizeOnDisk: record, OperatingSystem: record, CreationTime: record, ServerSdkVersion: record>> {
+  --x-amz-target: string@x-amz-target-completer-33 # required
+  build_id: string # A unique identifier for the build to retrieve properties for. You can use either the build ID or ARN value.
+]: any -> oneof<record<Build: record<BuildId: string, BuildArn: string, Name: string, Version: string, Status: string, SizeOnDisk: int, OperatingSystem: string, CreationTime: string, ServerSdkVersion: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "GameLift.DescribeBuild")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"BuildId": $build_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1973,13 +2054,14 @@ export def "describe-compute" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-34
-  fleet_id: any
-  compute_name: any
-]: any -> record<Compute: record<FleetId: record, FleetArn: record, ComputeName: record, ComputeArn: record, IpAddress: record, DnsName: record, ComputeStatus: record, Location: record, CreationTime: record, OperatingSystem: record, Type: record, GameLiftServiceSdkEndpoint: record>> {
+  --x-amz-target: string@x-amz-target-completer-34 # required
+  fleet_id: string # A unique identifier for the fleet the compute is registered to.
+  compute_name: string # A descriptive label that is associated with the compute resource registered to your fleet.
+]: any -> oneof<record<Compute: record<FleetId: string, FleetArn: string, ComputeName: string, ComputeArn: string, IpAddress: string, DnsName: string, ComputeStatus: string, Location: string, CreationTime: string, OperatingSystem: string, Type: string, GameLiftServiceSdkEndpoint: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "GameLift.DescribeCompute")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"FleetId": $fleet_id, "ComputeName": $compute_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2022,13 +2104,14 @@ export def "describe-ec2-instance-limits" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-35
-  --ec2-instance-type: any
-  --location: any
-]: any -> record<EC2InstanceLimits: record> {
+  --x-amz-target: string@x-amz-target-completer-35 # required
+  --ec2-instance-type: string@ec2-instance-type-completer # Name of an Amazon EC2 instance type that is supported in Amazon GameLift. A fleet instance type determines the computing resources of each instance in the fleet, including CPU, memory, storage, and networking capacity. Do not specify a value for this parameter to retrieve limits for all instance types.
+  --location: string # The name of a remote location to request instance limits for, in the form of an Amazon Web Services Region code such as us-west-2.
+]: any -> oneof<record<EC2InstanceLimits: table<EC2InstanceType: string, CurrentInstances: int, InstanceLimit: int, Location: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "GameLift.DescribeEC2InstanceLimits")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"EC2InstanceType": $ec2_instance_type, "Location": $location} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2073,14 +2156,15 @@ export def "describe-fleet-attributes" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-36
-  --fleet-ids: any
-  --limit-body: any #  (body field)
-  --next-token-body: any #  (body field)
-]: any -> record<FleetAttributes: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-36 # required
+  --fleet-ids: list<string> # A list of unique fleet identifiers to retrieve attributes for. You can use either the fleet ID or ARN value. To retrieve attributes for all current fleets, do not include this parameter.
+  --limit-body: int # The maximum number of results to return. Use this parameter with NextToken to get results as a set of sequential pages. This parameter is ignored when the request specifies one or a list of fleet IDs. (body field)
+  --next-token-body: string # A token that indicates the start of the next sequential page of results. Use the token that is returned with a previous call to this operation. To start at the beginning of the result set, do not specify a value. This parameter is ignored when the request specifies one or a list of fleet IDs. (body field)
+]: any -> oneof<record<FleetAttributes: table<FleetId: string, FleetArn: string, FleetType: string, InstanceType: string, Description: string, Name: string, CreationTime: string, TerminationTime: string, Status: string, BuildId: string, BuildArn: string, ScriptId: string, ScriptArn: string, ServerLaunchPath: string, ServerLaunchParameters: string, LogPaths: list, NewGameSessionProtectionPolicy: string, OperatingSystem: string, ResourceCreationLimitPolicy: record, MetricGroups: list, StoppedActions: list, InstanceRoleArn: string, CertificateConfiguration: record, ComputeType: string, AnywhereConfiguration: record>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "GameLift.DescribeFleetAttributes")
   let qp = [(serialize-qp "Limit" $limit "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"FleetIds": $fleet_ids, "Limit": $limit_body, "NextToken": $next_token_body} | compact
@@ -2126,14 +2210,15 @@ export def "describe-fleet-capacity" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-37
-  --fleet-ids: any
-  --limit-body: any #  (body field)
-  --next-token-body: any #  (body field)
-]: any -> record<FleetCapacity: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-37 # required
+  --fleet-ids: list<string> # A unique identifier for the fleet to retrieve capacity information for. You can use either the fleet ID or ARN value. Leave this parameter empty to retrieve capacity information for all fleets.
+  --limit-body: int # The maximum number of results to return. Use this parameter with NextToken to get results as a set of sequential pages. This parameter is ignored when the request specifies one or a list of fleet IDs. (body field)
+  --next-token-body: string # A token that indicates the start of the next sequential page of results. Use the token that is returned with a previous call to this operation. To start at the beginning of the result set, do not specify a value. This parameter is ignored when the request specifies one or a list of fleet IDs. (body field)
+]: any -> oneof<record<FleetCapacity: table<FleetId: string, FleetArn: string, InstanceType: string, InstanceCounts: record, Location: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "GameLift.DescribeFleetCapacity")
   let qp = [(serialize-qp "Limit" $limit "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"FleetIds": $fleet_ids, "Limit": $limit_body, "NextToken": $next_token_body} | compact
@@ -2179,16 +2264,17 @@ export def "describe-fleet-events" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-38
-  fleet_id: any
-  --start-time: any
-  --end-time: any
-  --limit-body: any #  (body field)
-  --next-token-body: any #  (body field)
-]: any -> record<Events: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-38 # required
+  fleet_id: string # A unique identifier for the fleet to get event logs for. You can use either the fleet ID or ARN value.
+  --start-time: string # The earliest date to retrieve event logs for. If no start time is specified, this call returns entries starting from when the fleet was created to the specified end time. Format is a number expressed in Unix time as milliseconds (ex: "1469498468.057"). (format: date-time)
+  --end-time: string # The most recent date to retrieve event logs for. If no end time is specified, this call returns entries from the specified start time up to the present. Format is a number expressed in Unix time as milliseconds (ex: "1469498468.057"). (format: date-time)
+  --limit-body: int # The maximum number of results to return. Use this parameter with NextToken to get results as a set of sequential pages. (body field)
+  --next-token-body: string # A token that indicates the start of the next sequential page of results. Use the token that is returned with a previous call to this operation. To start at the beginning of the result set, do not specify a value. (body field)
+]: any -> oneof<record<Events: table<EventId: string, ResourceId: string, EventCode: string, Message: string, EventTime: string, PreSignedLogUrl: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "GameLift.DescribeFleetEvents")
   let qp = [(serialize-qp "Limit" $limit "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"FleetId": $fleet_id, "StartTime": $start_time, "EndTime": $end_time, "Limit": $limit_body, "NextToken": $next_token_body} | compact
@@ -2234,15 +2320,16 @@ export def "describe-fleet-location-attributes" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-39
-  fleet_id: any
-  --locations: any
-  --limit-body: any #  (body field)
-  --next-token-body: any #  (body field)
-]: any -> record<FleetId: record, FleetArn: record, LocationAttributes: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-39 # required
+  fleet_id: string # A unique identifier for the fleet to retrieve remote locations for. You can use either the fleet ID or ARN value.
+  --locations: list<string> # A list of fleet locations to retrieve information for. Specify locations in the form of an Amazon Web Services Region code, such as us-west-2.
+  --limit-body: int # The maximum number of results to return. Use this parameter with NextToken to get results as a set of sequential pages. This limit is not currently enforced. (body field)
+  --next-token-body: string # A token that indicates the start of the next sequential page of results. Use the token that is returned with a previous call to this operation. To start at the beginning of the result set, do not specify a value. (body field)
+]: any -> oneof<record<FleetId: string, FleetArn: string, LocationAttributes: table<LocationState: record, StoppedActions: list, UpdateStatus: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "GameLift.DescribeFleetLocationAttributes")
   let qp = [(serialize-qp "Limit" $limit "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"FleetId": $fleet_id, "Locations": $locations, "Limit": $limit_body, "NextToken": $next_token_body} | compact
@@ -2286,13 +2373,14 @@ export def "describe-fleet-location-capacity" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-40
-  fleet_id: any
-  location: any
-]: any -> record<FleetCapacity: record<FleetId: record, FleetArn: record, InstanceType: record, InstanceCounts: record<DESIRED: record, MINIMUM: record, MAXIMUM: record, PENDING: record, ACTIVE: record, IDLE: record, TERMINATING: record>, Location: record>> {
+  --x-amz-target: string@x-amz-target-completer-40 # required
+  fleet_id: string # A unique identifier for the fleet to request location capacity for. You can use either the fleet ID or ARN value.
+  location: string # The fleet location to retrieve capacity information for. Specify a location in the form of an Amazon Web Services Region code, such as us-west-2.
+]: any -> oneof<record<FleetCapacity: record<FleetId: string, FleetArn: string, InstanceType: string, InstanceCounts: record<DESIRED: int, MINIMUM: int, MAXIMUM: int, PENDING: int, ACTIVE: int, IDLE: int, TERMINATING: int>, Location: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "GameLift.DescribeFleetLocationCapacity")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"FleetId": $fleet_id, "Location": $location} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2335,13 +2423,14 @@ export def "describe-fleet-location-utilization" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-41
-  fleet_id: any
-  location: any
-]: any -> record<FleetUtilization: record<FleetId: record, FleetArn: record, ActiveServerProcessCount: record, ActiveGameSessionCount: record, CurrentPlayerSessionCount: record, MaximumPlayerSessionCount: record, Location: record>> {
+  --x-amz-target: string@x-amz-target-completer-41 # required
+  fleet_id: string # A unique identifier for the fleet to request location utilization for. You can use either the fleet ID or ARN value.
+  location: string # The fleet location to retrieve utilization information for. Specify a location in the form of an Amazon Web Services Region code, such as us-west-2.
+]: any -> oneof<record<FleetUtilization: record<FleetId: string, FleetArn: string, ActiveServerProcessCount: int, ActiveGameSessionCount: int, CurrentPlayerSessionCount: int, MaximumPlayerSessionCount: int, Location: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "GameLift.DescribeFleetLocationUtilization")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"FleetId": $fleet_id, "Location": $location} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2384,13 +2473,14 @@ export def "describe-fleet-port-settings" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-42
-  fleet_id: any
-  --location: any
-]: any -> record<FleetId: record, FleetArn: record, InboundPermissions: record, UpdateStatus: record, Location: record> {
+  --x-amz-target: string@x-amz-target-completer-42 # required
+  fleet_id: string # A unique identifier for the fleet to retrieve port settings for. You can use either the fleet ID or ARN value.
+  --location: string # A remote location to check for status of port setting updates. Use the Amazon Web Services Region code format, such as us-west-2.
+]: any -> oneof<record<FleetId: string, FleetArn: string, InboundPermissions: table<FromPort: int, ToPort: int, IpRange: string, Protocol: string>, UpdateStatus: string, Location: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "GameLift.DescribeFleetPortSettings")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"FleetId": $fleet_id, "Location": $location} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2435,14 +2525,15 @@ export def "describe-fleet-utilization" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-43
-  --fleet-ids: any
-  --limit-body: any #  (body field)
-  --next-token-body: any #  (body field)
-]: any -> record<FleetUtilization: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-43 # required
+  --fleet-ids: list<string> # A unique identifier for the fleet to retrieve utilization data for. You can use either the fleet ID or ARN value. To retrieve attributes for all current fleets, do not include this parameter.
+  --limit-body: int # The maximum number of results to return. Use this parameter with NextToken to get results as a set of sequential pages. This parameter is ignored when the request specifies one or a list of fleet IDs. (body field)
+  --next-token-body: string # A token that indicates the start of the next sequential page of results. Use the token that is returned with a previous call to this operation. To start at the beginning of the result set, do not specify a value. This parameter is ignored when the request specifies one or a list of fleet IDs. (body field)
+]: any -> oneof<record<FleetUtilization: table<FleetId: string, FleetArn: string, ActiveServerProcessCount: int, ActiveGameSessionCount: int, CurrentPlayerSessionCount: int, MaximumPlayerSessionCount: int, Location: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "GameLift.DescribeFleetUtilization")
   let qp = [(serialize-qp "Limit" $limit "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"FleetIds": $fleet_ids, "Limit": $limit_body, "NextToken": $next_token_body} | compact
@@ -2486,13 +2577,14 @@ export def "describe-game-server" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-44
-  game_server_group_name: any
-  game_server_id: any
-]: any -> record<GameServer: record<GameServerGroupName: record, GameServerGroupArn: record, GameServerId: record, InstanceId: record, ConnectionInfo: record, GameServerData: record, ClaimStatus: record, UtilizationStatus: record, RegistrationTime: record, LastClaimTime: record, LastHealthCheckTime: record>> {
+  --x-amz-target: string@x-amz-target-completer-44 # required
+  game_server_group_name: string # A unique identifier for the game server group where the game server is running.
+  game_server_id: string # A custom string that uniquely identifies the game server information to be retrieved.
+]: any -> oneof<record<GameServer: record<GameServerGroupName: string, GameServerGroupArn: string, GameServerId: string, InstanceId: string, ConnectionInfo: string, GameServerData: string, ClaimStatus: string, UtilizationStatus: string, RegistrationTime: string, LastClaimTime: string, LastHealthCheckTime: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "GameLift.DescribeGameServer")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"GameServerGroupName": $game_server_group_name, "GameServerId": $game_server_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2535,12 +2627,13 @@ export def "describe-game-server-group" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-45
-  game_server_group_name: any
-]: any -> record<GameServerGroup: record<GameServerGroupName: record, GameServerGroupArn: record, RoleArn: record, InstanceDefinitions: record, BalancingStrategy: record, GameServerProtectionPolicy: record, AutoScalingGroupArn: record, Status: record, StatusReason: record, SuspendedActions: record, CreationTime: record, LastUpdatedTime: record>> {
+  --x-amz-target: string@x-amz-target-completer-45 # required
+  game_server_group_name: string # A unique identifier for the game server group. Use either the name or ARN value.
+]: any -> oneof<record<GameServerGroup: record<GameServerGroupName: string, GameServerGroupArn: string, RoleArn: string, InstanceDefinitions: list<record>, BalancingStrategy: string, GameServerProtectionPolicy: string, AutoScalingGroupArn: string, Status: string, StatusReason: string, SuspendedActions: list<string>, CreationTime: string, LastUpdatedTime: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "GameLift.DescribeGameServerGroup")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"GameServerGroupName": $game_server_group_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2585,15 +2678,16 @@ export def "describe-game-server-instances" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-46
-  game_server_group_name: any
-  --instance-ids: any
-  --limit-body: any #  (body field)
-  --next-token-body: any #  (body field)
-]: any -> record<GameServerInstances: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-46 # required
+  game_server_group_name: string # A unique identifier for the game server group. Use either the name or ARN value.
+  --instance-ids: list<string> # The Amazon EC2 instance IDs that you want to retrieve status on. Amazon EC2 instance IDs use a 17-character format, for example: i-1234567890abcdef0. To retrieve all instances in the game server group, leave this parameter empty.
+  --limit-body: int # The maximum number of results to return. Use this parameter with NextToken to get results as a set of sequential pages. (body field)
+  --next-token-body: string # A token that indicates the start of the next sequential page of results. Use the token that is returned with a previous call to this operation. To start at the beginning of the result set, do not specify a value. (body field)
+]: any -> oneof<record<GameServerInstances: table<GameServerGroupName: string, GameServerGroupArn: string, InstanceId: string, InstanceStatus: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "GameLift.DescribeGameServerInstances")
   let qp = [(serialize-qp "Limit" $limit "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"GameServerGroupName": $game_server_group_name, "InstanceIds": $instance_ids, "Limit": $limit_body, "NextToken": $next_token_body} | compact
@@ -2639,18 +2733,19 @@ export def "describe-game-session-details" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-47
-  --fleet-id: any
-  --game-session-id: any
-  --alias-id: any
-  --location: any
-  --status-filter: any
-  --limit-body: any #  (body field)
-  --next-token-body: any #  (body field)
-]: any -> record<GameSessionDetails: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-47 # required
+  --fleet-id: string # A unique identifier for the fleet to retrieve all game sessions active on the fleet. You can use either the fleet ID or ARN value.
+  --game-session-id: string # A unique identifier for the game session to retrieve.
+  --alias-id: string # A unique identifier for the alias associated with the fleet to retrieve all game sessions for. You can use either the alias ID or ARN value.
+  --location: string # A fleet location to get game session details for. You can specify a fleet's home Region or a remote location. Use the Amazon Web Services Region code format, such as us-west-2.
+  --status-filter: string # Game session status to filter results on. Possible game session statuses include ACTIVE, TERMINATED, ACTIVATING and TERMINATING (the last two are transitory).
+  --limit-body: int # The maximum number of results to return. Use this parameter with NextToken to get results as a set of sequential pages. (body field)
+  --next-token-body: string # A token that indicates the start of the next sequential page of results. Use the token that is returned with a previous call to this operation. To start at the beginning of the result set, do not specify a value. (body field)
+]: any -> oneof<record<GameSessionDetails: table<GameSession: record, ProtectionPolicy: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "GameLift.DescribeGameSessionDetails")
   let qp = [(serialize-qp "Limit" $limit "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"FleetId": $fleet_id, "GameSessionId": $game_session_id, "AliasId": $alias_id, "Location": $location, "StatusFilter": $status_filter, "Limit": $limit_body, "NextToken": $next_token_body} | compact
@@ -2694,12 +2789,13 @@ export def "describe-game-session-placement" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-48
-  placement_id: any
-]: any -> record<GameSessionPlacement: record<PlacementId: record, GameSessionQueueName: record, Status: record, GameProperties: record, MaximumPlayerSessionCount: record, GameSessionName: record, GameSessionId: record, GameSessionArn: record, GameSessionRegion: record, PlayerLatencies: record, StartTime: record, EndTime: record, IpAddress: record, DnsName: record, Port: record, PlacedPlayerSessions: record, GameSessionData: record, MatchmakerData: record>> {
+  --x-amz-target: string@x-amz-target-completer-48 # required
+  placement_id: string # A unique identifier for a game session placement to retrieve.
+]: any -> oneof<record<GameSessionPlacement: record<PlacementId: string, GameSessionQueueName: string, Status: string, GameProperties: list<record>, MaximumPlayerSessionCount: int, GameSessionName: string, GameSessionId: string, GameSessionArn: string, GameSessionRegion: string, PlayerLatencies: list<record>, StartTime: string, EndTime: string, IpAddress: string, DnsName: string, Port: int, PlacedPlayerSessions: list<record>, GameSessionData: string, MatchmakerData: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "GameLift.DescribeGameSessionPlacement")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"PlacementId": $placement_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2744,14 +2840,15 @@ export def "describe-game-session-queues" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-49
-  --names: any
-  --limit-body: any #  (body field)
-  --next-token-body: any #  (body field)
-]: any -> record<GameSessionQueues: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-49 # required
+  --names: list<string> # A list of queue names to retrieve information for. You can use either the queue ID or ARN value. To request settings for all queues, leave this parameter empty.
+  --limit-body: int # The maximum number of results to return. Use this parameter with NextToken to get results as a set of sequential pages. You can request up to 50 results. (body field)
+  --next-token-body: string # A token that indicates the start of the next sequential page of results. Use the token that is returned with a previous call to this operation. To start at the beginning of the result set, do not specify a value. (body field)
+]: any -> oneof<record<GameSessionQueues: table<Name: string, GameSessionQueueArn: string, TimeoutInSeconds: int, PlayerLatencyPolicies: list, Destinations: list, FilterConfiguration: record, PriorityConfiguration: record, CustomEventData: string, NotificationTarget: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "GameLift.DescribeGameSessionQueues")
   let qp = [(serialize-qp "Limit" $limit "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"Names": $names, "Limit": $limit_body, "NextToken": $next_token_body} | compact
@@ -2797,18 +2894,19 @@ export def "describe-game-sessions" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-50
-  --fleet-id: any
-  --game-session-id: any
-  --alias-id: any
-  --location: any
-  --status-filter: any
-  --limit-body: any #  (body field)
-  --next-token-body: any #  (body field)
-]: any -> record<GameSessions: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-50 # required
+  --fleet-id: string # A unique identifier for the fleet to retrieve game sessions for. You can use either the fleet ID or ARN value.
+  --game-session-id: string # A unique identifier for the game session to retrieve.
+  --alias-id: string # A unique identifier for the alias associated with the fleet to retrieve game sessions for. You can use either the alias ID or ARN value.
+  --location: string # A fleet location to get game sessions for. You can specify a fleet's home Region or a remote location. Use the Amazon Web Services Region code format, such as us-west-2.
+  --status-filter: string # Game session status to filter results on. You can filter on the following states: ACTIVE, TERMINATED, ACTIVATING, and TERMINATING. The last two are transitory and used for only very brief periods of time.
+  --limit-body: int # The maximum number of results to return. Use this parameter with NextToken to get results as a set of sequential pages. (body field)
+  --next-token-body: string # A token that indicates the start of the next sequential page of results. Use the token that is returned with a previous call to this operation. To start at the beginning of the result set, do not specify a value. (body field)
+]: any -> oneof<record<GameSessions: table<GameSessionId: string, Name: string, FleetId: string, FleetArn: string, CreationTime: string, TerminationTime: string, CurrentPlayerSessionCount: int, MaximumPlayerSessionCount: int, Status: string, StatusReason: string, GameProperties: list, IpAddress: string, DnsName: string, Port: int, PlayerSessionCreationPolicy: string, CreatorId: string, GameSessionData: string, MatchmakerData: string, Location: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "GameLift.DescribeGameSessions")
   let qp = [(serialize-qp "Limit" $limit "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"FleetId": $fleet_id, "GameSessionId": $game_session_id, "AliasId": $alias_id, "Location": $location, "StatusFilter": $status_filter, "Limit": $limit_body, "NextToken": $next_token_body} | compact
@@ -2854,16 +2952,17 @@ export def "describe-instances" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-51
-  fleet_id: any
-  --instance-id: any
-  --limit-body: any #  (body field)
-  --next-token-body: any #  (body field)
-  --location: any
-]: any -> record<Instances: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-51 # required
+  fleet_id: string # A unique identifier for the fleet to retrieve instance information for. You can use either the fleet ID or ARN value.
+  --instance-id: string # A unique identifier for an instance to retrieve. Specify an instance ID or leave blank to retrieve all instances in the fleet.
+  --limit-body: int # The maximum number of results to return. Use this parameter with NextToken to get results as a set of sequential pages. (body field)
+  --next-token-body: string # A token that indicates the start of the next sequential page of results. Use the token that is returned with a previous call to this operation. To start at the beginning of the result set, do not specify a value. (body field)
+  --location: string # The name of a location to retrieve instance information for, in the form of an Amazon Web Services Region code such as us-west-2.
+]: any -> oneof<record<Instances: table<FleetId: string, FleetArn: string, InstanceId: string, IpAddress: string, DnsName: string, OperatingSystem: string, Type: string, Status: string, CreationTime: string, Location: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "GameLift.DescribeInstances")
   let qp = [(serialize-qp "Limit" $limit "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"FleetId": $fleet_id, "InstanceId": $instance_id, "Limit": $limit_body, "NextToken": $next_token_body, "Location": $location} | compact
@@ -2907,12 +3006,13 @@ export def "describe-matchmaking" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-52
-  ticket_ids: any
-]: any -> record<TicketList: record> {
+  --x-amz-target: string@x-amz-target-completer-52 # required
+  ticket_ids: list<string> # A unique identifier for a matchmaking ticket. You can include up to 10 ID values.
+]: any -> oneof<record<TicketList: table<TicketId: string, ConfigurationName: string, ConfigurationArn: string, Status: string, StatusReason: string, StatusMessage: string, StartTime: string, EndTime: string, Players: list, GameSessionConnectionInfo: record, EstimatedWaitTime: int>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "GameLift.DescribeMatchmaking")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"TicketIds": $ticket_ids} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2957,15 +3057,16 @@ export def "describe-matchmaking-configurations" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-53
-  --names: any
-  --rule-set-name: any
-  --limit-body: any #  (body field)
-  --next-token-body: any #  (body field)
-]: any -> record<Configurations: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-53 # required
+  --names: list<string> # A unique identifier for the matchmaking configuration(s) to retrieve. You can use either the configuration name or ARN value. To request all existing configurations, leave this parameter empty.
+  --rule-set-name: string # A unique identifier for the matchmaking rule set. You can use either the rule set name or ARN value. Use this parameter to retrieve all matchmaking configurations that use this rule set.
+  --limit-body: int # The maximum number of results to return. Use this parameter with NextToken to get results as a set of sequential pages. This parameter is limited to 10. (body field)
+  --next-token-body: string # A token that indicates the start of the next sequential page of results. Use the token that is returned with a previous call to this operation. To start at the beginning of the result set, do not specify a value. (body field)
+]: any -> oneof<record<Configurations: table<Name: string, ConfigurationArn: string, Description: string, GameSessionQueueArns: list, RequestTimeoutSeconds: int, AcceptanceTimeoutSeconds: int, AcceptanceRequired: bool, RuleSetName: string, RuleSetArn: string, NotificationTarget: string, AdditionalPlayerCount: int, CustomEventData: string, CreationTime: string, GameProperties: list, GameSessionData: string, BackfillMode: string, FlexMatchMode: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "GameLift.DescribeMatchmakingConfigurations")
   let qp = [(serialize-qp "Limit" $limit "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"Names": $names, "RuleSetName": $rule_set_name, "Limit": $limit_body, "NextToken": $next_token_body} | compact
@@ -3011,14 +3112,15 @@ export def "describe-matchmaking-rule-sets" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-54
-  --names: any
-  --limit-body: any #  (body field)
-  --next-token-body: any #  (body field)
-]: any -> record<RuleSets: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-54 # required
+  --names: list<string> # A list of one or more matchmaking rule set names to retrieve details for. (Note: The rule set name is different from the optional "name" field in the rule set body.) You can use either the rule set name or ARN value.
+  --limit-body: int # The maximum number of results to return. Use this parameter with NextToken to get results as a set of sequential pages. (body field)
+  --next-token-body: string # A token that indicates the start of the next sequential page of results. Use the token that is returned with a previous call to this operation. To start at the beginning of the result set, do not specify a value. (body field)
+]: any -> oneof<record<RuleSets: table<RuleSetName: string, RuleSetArn: string, RuleSetBody: string, CreationTime: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "GameLift.DescribeMatchmakingRuleSets")
   let qp = [(serialize-qp "Limit" $limit "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"Names": $names, "Limit": $limit_body, "NextToken": $next_token_body} | compact
@@ -3064,17 +3166,18 @@ export def "describe-player-sessions" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-55
-  --game-session-id: any
-  --player-id: any
-  --player-session-id: any
-  --player-session-status-filter: any
-  --limit-body: any #  (body field)
-  --next-token-body: any #  (body field)
-]: any -> record<PlayerSessions: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-55 # required
+  --game-session-id: string # A unique identifier for the game session to retrieve player sessions for.
+  --player-id: string # A unique identifier for a player to retrieve player sessions for.
+  --player-session-id: string # A unique identifier for a player session to retrieve.
+  --player-session-status-filter: string # Player session status to filter results on. Note that when a PlayerSessionId or PlayerId is provided in a DescribePlayerSessions request, then the PlayerSessionStatusFilter has no effect on the response. Possible player session statuses include the following: RESERVED -- The player session request has been received, but the player has not yet connected to the server process and/or been validated. ACTIVE -- The player has been validated by the server process and is currently connected. COMPLETED -- The player connection has been dropped. TIMEDOUT -- A player session request was received, but the player did not connect and/or was not validated within the timeout limit (60 seconds).
+  --limit-body: int # The maximum number of results to return. Use this parameter with NextToken to get results as a set of sequential pages. If a player session ID is specified, this parameter is ignored. (body field)
+  --next-token-body: string # A token that indicates the start of the next sequential page of results. Use the token that is returned with a previous call to this operation. To start at the beginning of the result set, do not specify a value. If a player session ID is specified, this parameter is ignored. (body field)
+]: any -> oneof<record<PlayerSessions: table<PlayerSessionId: string, PlayerId: string, GameSessionId: string, FleetId: string, FleetArn: string, CreationTime: string, TerminationTime: string, Status: string, IpAddress: string, DnsName: string, Port: int, PlayerData: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "GameLift.DescribePlayerSessions")
   let qp = [(serialize-qp "Limit" $limit "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"GameSessionId": $game_session_id, "PlayerId": $player_id, "PlayerSessionId": $player_session_id, "PlayerSessionStatusFilter": $player_session_status_filter, "Limit": $limit_body, "NextToken": $next_token_body} | compact
@@ -3118,12 +3221,13 @@ export def "describe-runtime-configuration" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-56
-  fleet_id: any
-]: any -> record<RuntimeConfiguration: record<ServerProcesses: record, MaxConcurrentGameSessionActivations: record, GameSessionActivationTimeoutSeconds: record>> {
+  --x-amz-target: string@x-amz-target-completer-56 # required
+  fleet_id: string # A unique identifier for the fleet to get the runtime configuration for. You can use either the fleet ID or ARN value.
+]: any -> oneof<record<RuntimeConfiguration: record<ServerProcesses: list<record>, MaxConcurrentGameSessionActivations: int, GameSessionActivationTimeoutSeconds: int>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "GameLift.DescribeRuntimeConfiguration")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"FleetId": $fleet_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -3168,16 +3272,17 @@ export def "describe-scaling-policies" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-57
-  fleet_id: any
-  --status-filter: any
-  --limit-body: any #  (body field)
-  --next-token-body: any #  (body field)
-  --location: any
-]: any -> record<ScalingPolicies: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-57 # required
+  fleet_id: string # A unique identifier for the fleet for which to retrieve scaling policies. You can use either the fleet ID or ARN value.
+  --status-filter: string@status-filter-completer # Scaling policy status to filter results on. A scaling policy is only in force when in an ACTIVE status. ACTIVE -- The scaling policy is currently in force. UPDATEREQUESTED -- A request to update the scaling policy has been received. UPDATING -- A change is being made to the scaling policy. DELETEREQUESTED -- A request to delete the scaling policy has been received. DELETING -- The scaling policy is being deleted. DELETED -- The scaling policy has been deleted. ERROR -- An error occurred in creating the policy. It should be removed and recreated.
+  --limit-body: int # The maximum number of results to return. Use this parameter with NextToken to get results as a set of sequential pages. (body field)
+  --next-token-body: string # A token that indicates the start of the next sequential page of results. Use the token that is returned with a previous call to this operation. To start at the beginning of the result set, do not specify a value. (body field)
+  --location: string # The fleet location. If you don't specify this value, the response contains the scaling policies of every location in the fleet.
+]: any -> oneof<record<ScalingPolicies: table<FleetId: string, FleetArn: string, Name: string, Status: string, ScalingAdjustment: int, ScalingAdjustmentType: string, ComparisonOperator: string, Threshold: float, EvaluationPeriods: int, MetricName: string, PolicyType: string, TargetConfiguration: record, UpdateStatus: string, Location: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "GameLift.DescribeScalingPolicies")
   let qp = [(serialize-qp "Limit" $limit "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"FleetId": $fleet_id, "StatusFilter": $status_filter, "Limit": $limit_body, "NextToken": $next_token_body, "Location": $location} | compact
@@ -3221,12 +3326,13 @@ export def "describe-script" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-58
-  script_id: any
-]: any -> record<Script: record<ScriptId: record, ScriptArn: record, Name: record, Version: record, SizeOnDisk: record, CreationTime: record, StorageLocation: record<Bucket: record, Key: record, RoleArn: record, ObjectVersion: record>>> {
+  --x-amz-target: string@x-amz-target-completer-58 # required
+  script_id: string # A unique identifier for the Realtime script to retrieve properties for. You can use either the script ID or ARN value.
+]: any -> oneof<record<Script: record<ScriptId: string, ScriptArn: string, Name: string, Version: string, SizeOnDisk: int, CreationTime: string, StorageLocation: record<Bucket: string, Key: string, RoleArn: string, ObjectVersion: string>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "GameLift.DescribeScript")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ScriptId": $script_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -3269,12 +3375,13 @@ export def "describe-vpc-peering-authorizations" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-59
+  --x-amz-target: string@x-amz-target-completer-59 # required
   --body: record
-]: any -> record<VpcPeeringAuthorizations: record> {
+]: any -> oneof<record<VpcPeeringAuthorizations: table<GameLiftAwsAccountId: string, PeerVpcAwsAccountId: string, PeerVpcId: string, CreationTime: string, ExpirationTime: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "GameLift.DescribeVpcPeeringAuthorizations")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -3317,12 +3424,13 @@ export def "describe-vpc-peering-connections" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-60
-  --fleet-id: any
-]: any -> record<VpcPeeringConnections: record> {
+  --x-amz-target: string@x-amz-target-completer-60 # required
+  --fleet-id: string # A unique identifier for the fleet. You can use either the fleet ID or ARN value.
+]: any -> oneof<record<VpcPeeringConnections: table<FleetId: string, FleetArn: string, IpV4CidrBlock: string, VpcPeeringConnectionId: string, Status: record, PeerVpcId: string, GameLiftVpcId: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "GameLift.DescribeVpcPeeringConnections")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"FleetId": $fleet_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -3365,13 +3473,14 @@ export def "get-compute-access" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-61
-  fleet_id: any
-  compute_name: any
-]: any -> record<FleetId: record, FleetArn: record, ComputeName: record, ComputeArn: record, Credentials: record<AccessKeyId: record, SecretAccessKey: record, SessionToken: record>> {
+  --x-amz-target: string@x-amz-target-completer-61 # required
+  fleet_id: string # A unique identifier for the fleet that the compute resource is registered to.
+  compute_name: string # The name of the compute resource you are requesting credentials for.
+]: any -> oneof<record<FleetId: string, FleetArn: string, ComputeName: string, ComputeArn: string, Credentials: record<AccessKeyId: string, SecretAccessKey: string, SessionToken: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "GameLift.GetComputeAccess")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"FleetId": $fleet_id, "ComputeName": $compute_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -3414,13 +3523,14 @@ export def "get-compute-auth-token" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-62
-  fleet_id: any
-  compute_name: any
-]: any -> record<FleetId: record, FleetArn: record, ComputeName: record, ComputeArn: record, AuthToken: record, ExpirationTimestamp: record> {
+  --x-amz-target: string@x-amz-target-completer-62 # required
+  fleet_id: string # A unique identifier for the fleet that the compute is registered to.
+  compute_name: string # The name of the compute resource you are requesting the authentication token for.
+]: any -> oneof<record<FleetId: string, FleetArn: string, ComputeName: string, ComputeArn: string, AuthToken: string, ExpirationTimestamp: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "GameLift.GetComputeAuthToken")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"FleetId": $fleet_id, "ComputeName": $compute_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -3463,12 +3573,13 @@ export def "get-game-session-log-url" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-63
-  game_session_id: any
-]: any -> record<PreSignedUrl: record> {
+  --x-amz-target: string@x-amz-target-completer-63 # required
+  game_session_id: string # A unique identifier for the game session to get logs for.
+]: any -> oneof<record<PreSignedUrl: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "GameLift.GetGameSessionLogUrl")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"GameSessionId": $game_session_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -3511,13 +3622,14 @@ export def "get-instance-access" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-64
-  fleet_id: any
-  instance_id: any
-]: any -> record<InstanceAccess: record<FleetId: record, InstanceId: record, IpAddress: record, OperatingSystem: record, Credentials: record<UserName: record, Secret: record>>> {
+  --x-amz-target: string@x-amz-target-completer-64 # required
+  fleet_id: string # A unique identifier for the fleet that contains the instance you want access to. You can use either the fleet ID or ARN value. The fleet can be in any of the following statuses: ACTIVATING, ACTIVE, or ERROR. Fleets with an ERROR status may be accessible for a short time before they are deleted.
+  instance_id: string # A unique identifier for the instance you want to get access to. You can access an instance in any status.
+]: any -> oneof<record<InstanceAccess: record<FleetId: string, InstanceId: string, IpAddress: string, OperatingSystem: string, Credentials: record<UserName: string, Secret: string>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "GameLift.GetInstanceAccess")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"FleetId": $fleet_id, "InstanceId": $instance_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -3562,15 +3674,16 @@ export def "list-aliases" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-65
-  --routing-strategy-type: any
-  --name: any
-  --limit-body: any #  (body field)
-  --next-token-body: any #  (body field)
-]: any -> record<Aliases: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-65 # required
+  --routing-strategy-type: string@routing-strategy-type-completer # The routing type to filter results on. Use this parameter to retrieve only aliases with a certain routing type. To retrieve all aliases, leave this parameter empty. Possible routing types include the following: SIMPLE -- The alias resolves to one specific fleet. Use this type when routing to active fleets. TERMINAL -- The alias does not resolve to a fleet but instead can be used to display a message to the user. A terminal alias throws a TerminalRoutingStrategyException with the RoutingStrategy (https://docs.aws.amazon.com/gamelift/latest/apireference/API_RoutingStrategy.html) message embedded.
+  --name: string # A descriptive label that is associated with an alias. Alias names do not need to be unique.
+  --limit-body: int # The maximum number of results to return. Use this parameter with NextToken to get results as a set of sequential pages. (body field)
+  --next-token-body: string # A token that indicates the start of the next sequential page of results. Use the token that is returned with a previous call to this operation. To start at the beginning of the result set, do not specify a value. (body field)
+]: any -> oneof<record<Aliases: table<AliasId: string, Name: string, AliasArn: string, Description: string, RoutingStrategy: record, CreationTime: string, LastUpdatedTime: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "GameLift.ListAliases")
   let qp = [(serialize-qp "Limit" $limit "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"RoutingStrategyType": $routing_strategy_type, "Name": $name, "Limit": $limit_body, "NextToken": $next_token_body} | compact
@@ -3616,14 +3729,15 @@ export def "list-builds" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-66
-  --status: any
-  --limit-body: any #  (body field)
-  --next-token-body: any #  (body field)
-]: any -> record<Builds: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-66 # required
+  --status: string@status-completer # Build status to filter results by. To retrieve all builds, leave this parameter empty. Possible build statuses include the following: INITIALIZED -- A new build has been defined, but no files have been uploaded. You cannot create fleets for builds that are in this status. When a build is successfully created, the build status is set to this value. READY -- The game build has been successfully uploaded. You can now create new fleets for this build. FAILED -- The game build upload failed. You cannot create new fleets for this build.
+  --limit-body: int # The maximum number of results to return. Use this parameter with NextToken to get results as a set of sequential pages. (body field)
+  --next-token-body: string # A token that indicates the start of the next sequential page of results. Use the token that is returned with a previous call to this operation. To start at the beginning of the result set, don't specify a value. (body field)
+]: any -> oneof<record<Builds: table<BuildId: string, BuildArn: string, Name: string, Version: string, Status: string, SizeOnDisk: int, OperatingSystem: string, CreationTime: string, ServerSdkVersion: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "GameLift.ListBuilds")
   let qp = [(serialize-qp "Limit" $limit "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"Status": $status, "Limit": $limit_body, "NextToken": $next_token_body} | compact
@@ -3669,15 +3783,16 @@ export def "list-compute" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-67
-  fleet_id: any
-  --location: any
-  --limit-body: any #  (body field)
-  --next-token-body: any #  (body field)
-]: any -> record<ComputeList: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-67 # required
+  fleet_id: string # A unique identifier for the fleet the compute resources are registered to.
+  --location: string # The name of the custom location that the compute resources are assigned to.
+  --limit-body: int # The maximum number of results to return. Use this parameter with NextToken to get results as a set of sequential pages. (body field)
+  --next-token-body: string # A token that indicates the start of the next sequential page of results. Use the token that is returned with a previous call to this operation. To start at the beginning of the result set, do not specify a value. (body field)
+]: any -> oneof<record<ComputeList: table<FleetId: string, FleetArn: string, ComputeName: string, ComputeArn: string, IpAddress: string, DnsName: string, ComputeStatus: string, Location: string, CreationTime: string, OperatingSystem: string, Type: string, GameLiftServiceSdkEndpoint: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "GameLift.ListCompute")
   let qp = [(serialize-qp "Limit" $limit "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"FleetId": $fleet_id, "Location": $location, "Limit": $limit_body, "NextToken": $next_token_body} | compact
@@ -3723,15 +3838,16 @@ export def "list-fleets" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-68
-  --build-id: any
-  --script-id: any
-  --limit-body: any #  (body field)
-  --next-token-body: any #  (body field)
-]: any -> record<FleetIds: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-68 # required
+  --build-id: string # A unique identifier for the build to request fleets for. Use this parameter to return only fleets using a specified build. Use either the build ID or ARN value.
+  --script-id: string # A unique identifier for the Realtime script to request fleets for. Use this parameter to return only fleets using a specified script. Use either the script ID or ARN value.
+  --limit-body: int # The maximum number of results to return. Use this parameter with NextToken to get results as a set of sequential pages. (body field)
+  --next-token-body: string # A token that indicates the start of the next sequential page of results. Use the token that is returned with a previous call to this operation. To start at the beginning of the result set, do not specify a value. (body field)
+]: any -> oneof<record<FleetIds: list<string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "GameLift.ListFleets")
   let qp = [(serialize-qp "Limit" $limit "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"BuildId": $build_id, "ScriptId": $script_id, "Limit": $limit_body, "NextToken": $next_token_body} | compact
@@ -3777,13 +3893,14 @@ export def "list-game-server-groups" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-69
-  --limit-body: any #  (body field)
-  --next-token-body: any #  (body field)
-]: any -> record<GameServerGroups: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-69 # required
+  --limit-body: int # The game server groups' limit. (body field)
+  --next-token-body: string # Specify the pagination token from a previous request to retrieve the next page of results. (body field)
+]: any -> oneof<record<GameServerGroups: table<GameServerGroupName: string, GameServerGroupArn: string, RoleArn: string, InstanceDefinitions: list, BalancingStrategy: string, GameServerProtectionPolicy: string, AutoScalingGroupArn: string, Status: string, StatusReason: string, SuspendedActions: list, CreationTime: string, LastUpdatedTime: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "GameLift.ListGameServerGroups")
   let qp = [(serialize-qp "Limit" $limit "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"Limit": $limit_body, "NextToken": $next_token_body} | compact
@@ -3829,15 +3946,16 @@ export def "list-game-servers" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-70
-  game_server_group_name: any
-  --sort-order: any
-  --limit-body: any #  (body field)
-  --next-token-body: any #  (body field)
-]: any -> record<GameServers: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-70 # required
+  game_server_group_name: string # An identifier for the game server group to retrieve a list of game servers from. Use either the name or ARN value.
+  --sort-order: string@sort-order-completer # Indicates how to sort the returned data based on game server registration timestamp. Use ASCENDING to retrieve oldest game servers first, or use DESCENDING to retrieve newest game servers first. If this parameter is left empty, game servers are returned in no particular order.
+  --limit-body: int # The maximum number of results to return. Use this parameter with NextToken to get results as a set of sequential pages. (body field)
+  --next-token-body: string # A token that indicates the start of the next sequential page of results. Use the token that is returned with a previous call to this operation. To start at the beginning of the result set, do not specify a value. (body field)
+]: any -> oneof<record<GameServers: table<GameServerGroupName: string, GameServerGroupArn: string, GameServerId: string, InstanceId: string, ConnectionInfo: string, GameServerData: string, ClaimStatus: string, UtilizationStatus: string, RegistrationTime: string, LastClaimTime: string, LastHealthCheckTime: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "GameLift.ListGameServers")
   let qp = [(serialize-qp "Limit" $limit "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"GameServerGroupName": $game_server_group_name, "SortOrder": $sort_order, "Limit": $limit_body, "NextToken": $next_token_body} | compact
@@ -3883,14 +4001,15 @@ export def "list-locations" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-71
-  --filters: any
-  --limit-body: any #  (body field)
-  --next-token-body: any #  (body field)
-]: any -> record<Locations: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-71 # required
+  --filters: list<string> # Filters the list for AWS or CUSTOM locations.
+  --limit-body: int # The maximum number of results to return. Use this parameter with NextToken to get results as a set of sequential pages. (body field)
+  --next-token-body: string # A token that indicates the start of the next sequential page of results. Use the token that is returned with a previous call to this operation. To start at the beginning of the result set, do not specify a value. (body field)
+]: any -> oneof<record<Locations: table<LocationName: string, LocationArn: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "GameLift.ListLocations")
   let qp = [(serialize-qp "Limit" $limit "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"Filters": $filters, "Limit": $limit_body, "NextToken": $next_token_body} | compact
@@ -3936,13 +4055,14 @@ export def "list-scripts" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-72
-  --limit-body: any #  (body field)
-  --next-token-body: any #  (body field)
-]: any -> record<Scripts: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-72 # required
+  --limit-body: int # The maximum number of results to return. Use this parameter with NextToken to get results as a set of sequential pages. (body field)
+  --next-token-body: string # A token that indicates the start of the next sequential page of results. Use the token that is returned with a previous call to this operation. To start at the beginning of the result set, don't specify a value. (body field)
+]: any -> oneof<record<Scripts: table<ScriptId: string, ScriptArn: string, Name: string, Version: string, SizeOnDisk: int, CreationTime: string, StorageLocation: record>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "GameLift.ListScripts")
   let qp = [(serialize-qp "Limit" $limit "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"Limit": $limit_body, "NextToken": $next_token_body} | compact
@@ -3986,12 +4106,13 @@ export def "list-tags-for-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-73
-  resource_arn: any
-]: any -> record<Tags: record> {
+  --x-amz-target: string@x-amz-target-completer-73 # required
+  resource_arn: string # The Amazon Resource Name (ARN (https://docs.aws.amazon.com/AmazonS3/latest/dev/s3-arn-format.html)) that uniquely identifies the Amazon GameLift resource that you want to retrieve tags for. Amazon GameLift includes resource ARNs in the data object for the resource. You can retrieve the ARN by calling a List or Describe operation for the resource type.
+]: any -> oneof<record<Tags: table<Key: string, Value: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "GameLift.ListTagsForResource")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ResourceARN": $resource_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -4034,21 +4155,22 @@ export def "put-scaling-policy" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-74
-  name: any
-  fleet_id: any
-  --scaling-adjustment: any
-  --scaling-adjustment-type: any
-  --threshold: any
-  --comparison-operator: any
-  --evaluation-periods: any
-  metric_name: any
-  --policy-type: any
-  --target-configuration: any
-]: any -> record<Name: record> {
+  --x-amz-target: string@x-amz-target-completer-74 # required
+  name: string # A descriptive label that is associated with a fleet's scaling policy. Policy names do not need to be unique. A fleet can have only one scaling policy with the same name.
+  fleet_id: string # A unique identifier for the fleet to apply this policy to. You can use either the fleet ID or ARN value. The fleet cannot be in any of the following statuses: ERROR or DELETING.
+  --scaling-adjustment: int # Amount of adjustment to make, based on the scaling adjustment type.
+  --scaling-adjustment-type: string@scaling-adjustment-type-completer # The type of adjustment to make to a fleet's instance count: ChangeInCapacity -- add (or subtract) the scaling adjustment value from the current instance count. Positive values scale up while negative values scale down. ExactCapacity -- set the instance count to the scaling adjustment value. PercentChangeInCapacity -- increase or reduce the current instance count by the scaling adjustment, read as a percentage. Positive values scale up while negative values scale down; for example, a value of "-10" scales the fleet down by 10%.
+  --threshold: float # Metric value used to trigger a scaling event. (format: double)
+  --comparison-operator: string@comparison-operator-completer # Comparison operator to use when measuring the metric against the threshold value.
+  --evaluation-periods: int # Length of time (in minutes) the metric must be at or beyond the threshold before a scaling event is triggered.
+  metric_name: string@metric-name-completer # Name of the Amazon GameLift-defined metric that is used to trigger a scaling adjustment. For detailed descriptions of fleet metrics, see Monitor Amazon GameLift with Amazon CloudWatch (https://docs.aws.amazon.com/gamelift/latest/developerguide/monitoring-cloudwatch.html). ActivatingGameSessions -- Game sessions in the process of being created. ActiveGameSessions -- Game sessions that are currently running. ActiveInstances -- Fleet instances that are currently running at least one game session. AvailableGameSessions -- Additional game sessions that fleet could host simultaneously, given current capacity. AvailablePlayerSessions -- Empty player slots in currently active game sessions. This includes game sessions that are not currently accepting players. Reserved player slots are not included. CurrentPlayerSessions -- Player slots in active game sessions that are being used by a player or are reserved for a player. IdleInstances -- Active instances that are currently hosting zero game sessions. PercentAvailableGameSessions -- Unused percentage of the total number of game sessions that a fleet could host simultaneously, given current capacity. Use this metric for a target-based scaling policy. PercentIdleInstances -- Percentage of the total number of active instances that are hosting zero game sessions. QueueDepth -- Pending game session placement requests, in any queue, where the current fleet is the top-priority destination. WaitTime -- Current wait time for pending game session placement requests, in any queue, where the current fleet is the top-priority destination.
+  --policy-type: string@policy-type-completer # The type of scaling policy to create. For a target-based policy, set the parameter MetricName to 'PercentAvailableGameSessions' and specify a TargetConfiguration. For a rule-based policy set the following parameters: MetricName, ComparisonOperator, Threshold, EvaluationPeriods, ScalingAdjustmentType, and ScalingAdjustment.
+  --target-configuration: record # Settings for a target-based scaling policy. A target-based policy tracks a particular fleet metric specifies a target value for the metric. As player usage changes, the policy triggers Amazon GameLift to adjust capacity so that the metric returns to the target value. The target configuration specifies settings as needed for the target based policy, including the target value. — shape: {TargetValue: float}
+]: any -> oneof<record<Name: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "GameLift.PutScalingPolicy")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Name": $name, "FleetId": $fleet_id, "ScalingAdjustment": $scaling_adjustment, "ScalingAdjustmentType": $scaling_adjustment_type, "Threshold": $threshold, "ComparisonOperator": $comparison_operator, "EvaluationPeriods": $evaluation_periods, "MetricName": $metric_name, "PolicyType": $policy_type, "TargetConfiguration": $target_configuration} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -4091,17 +4213,18 @@ export def "register-compute" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-75
-  fleet_id: any
-  compute_name: any
-  --certificate-path: any
-  --dns-name: any
-  --ip-address: any
-  --location: any
-]: any -> record<Compute: record<FleetId: record, FleetArn: record, ComputeName: record, ComputeArn: record, IpAddress: record, DnsName: record, ComputeStatus: record, Location: record, CreationTime: record, OperatingSystem: record, Type: record, GameLiftServiceSdkEndpoint: record>> {
+  --x-amz-target: string@x-amz-target-completer-75 # required
+  fleet_id: string # A unique identifier for the fleet to register the compute to. You can use either the fleet ID or ARN value.
+  compute_name: string # A descriptive label that is associated with the compute resource registered to your fleet.
+  --certificate-path: string # The path to the TLS certificate on your compute resource. The path and certificate are not validated by Amazon GameLift.
+  --dns-name: string # The DNS name of the compute resource. Amazon GameLift requires the DNS name or IP address to manage your compute resource.
+  --ip-address: string # The IP address of the compute resource. Amazon GameLift requires the DNS name or IP address to manage your compute resource.
+  --location: string # The name of the custom location you added to the fleet you are registering this compute resource to.
+]: any -> oneof<record<Compute: record<FleetId: string, FleetArn: string, ComputeName: string, ComputeArn: string, IpAddress: string, DnsName: string, ComputeStatus: string, Location: string, CreationTime: string, OperatingSystem: string, Type: string, GameLiftServiceSdkEndpoint: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "GameLift.RegisterCompute")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"FleetId": $fleet_id, "ComputeName": $compute_name, "CertificatePath": $certificate_path, "DnsName": $dns_name, "IpAddress": $ip_address, "Location": $location} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -4144,16 +4267,17 @@ export def "register-game-server" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-76
-  game_server_group_name: any
-  game_server_id: any
-  instance_id: any
-  --connection-info: any
-  --game-server-data: any
-]: any -> record<GameServer: record<GameServerGroupName: record, GameServerGroupArn: record, GameServerId: record, InstanceId: record, ConnectionInfo: record, GameServerData: record, ClaimStatus: record, UtilizationStatus: record, RegistrationTime: record, LastClaimTime: record, LastHealthCheckTime: record>> {
+  --x-amz-target: string@x-amz-target-completer-76 # required
+  game_server_group_name: string # A unique identifier for the game server group where the game server is running.
+  game_server_id: string # A custom string that uniquely identifies the game server to register. Game server IDs are developer-defined and must be unique across all game server groups in your Amazon Web Services account.
+  instance_id: string # The unique identifier for the instance where the game server is running. This ID is available in the instance metadata. EC2 instance IDs use a 17-character format, for example: i-1234567890abcdef0.
+  --connection-info: string # Information that is needed to make inbound client connections to the game server. This might include the IP address and port, DNS name, and other information.
+  --game-server-data: string # A set of custom game server properties, formatted as a single string value. This data is passed to a game client or service when it requests information on game servers.
+]: any -> oneof<record<GameServer: record<GameServerGroupName: string, GameServerGroupArn: string, GameServerId: string, InstanceId: string, ConnectionInfo: string, GameServerData: string, ClaimStatus: string, UtilizationStatus: string, RegistrationTime: string, LastClaimTime: string, LastHealthCheckTime: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "GameLift.RegisterGameServer")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"GameServerGroupName": $game_server_group_name, "GameServerId": $game_server_id, "InstanceId": $instance_id, "ConnectionInfo": $connection_info, "GameServerData": $game_server_data} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -4196,12 +4320,13 @@ export def "request-upload-credentials" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-77
-  build_id: any
-]: any -> record<UploadCredentials: record<AccessKeyId: record, SecretAccessKey: record, SessionToken: record>, StorageLocation: record<Bucket: record, Key: record, RoleArn: record, ObjectVersion: record>> {
+  --x-amz-target: string@x-amz-target-completer-77 # required
+  build_id: string # A unique identifier for the build to get credentials for. You can use either the build ID or ARN value.
+]: any -> oneof<record<UploadCredentials: record<AccessKeyId: string, SecretAccessKey: string, SessionToken: string>, StorageLocation: record<Bucket: string, Key: string, RoleArn: string, ObjectVersion: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "GameLift.RequestUploadCredentials")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"BuildId": $build_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -4244,12 +4369,13 @@ export def "resolve-alias" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-78
-  alias_id: any
-]: any -> record<FleetId: record, FleetArn: record> {
+  --x-amz-target: string@x-amz-target-completer-78 # required
+  alias_id: string # The unique identifier of the alias that you want to retrieve a fleet ID for. You can use either the alias ID or ARN value.
+]: any -> oneof<record<FleetId: string, FleetArn: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "GameLift.ResolveAlias")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"AliasId": $alias_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -4292,13 +4418,14 @@ export def "resume-game-server-group" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-79
-  game_server_group_name: any
-  resume_actions: any
-]: any -> record<GameServerGroup: record<GameServerGroupName: record, GameServerGroupArn: record, RoleArn: record, InstanceDefinitions: record, BalancingStrategy: record, GameServerProtectionPolicy: record, AutoScalingGroupArn: record, Status: record, StatusReason: record, SuspendedActions: record, CreationTime: record, LastUpdatedTime: record>> {
+  --x-amz-target: string@x-amz-target-completer-79 # required
+  game_server_group_name: string # A unique identifier for the game server group. Use either the name or ARN value.
+  resume_actions: list<string> # The activity to resume for this game server group.
+]: any -> oneof<record<GameServerGroup: record<GameServerGroupName: string, GameServerGroupArn: string, RoleArn: string, InstanceDefinitions: list<record>, BalancingStrategy: string, GameServerProtectionPolicy: string, AutoScalingGroupArn: string, Status: string, StatusReason: string, SuspendedActions: list<string>, CreationTime: string, LastUpdatedTime: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "GameLift.ResumeGameServerGroup")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"GameServerGroupName": $game_server_group_name, "ResumeActions": $resume_actions} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -4343,18 +4470,19 @@ export def "search-game-sessions" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-80
-  --fleet-id: any
-  --alias-id: any
-  --location: any
-  --filter-expression: any
-  --sort-expression: any
-  --limit-body: any #  (body field)
-  --next-token-body: any #  (body field)
-]: any -> record<GameSessions: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-80 # required
+  --fleet-id: string # A unique identifier for the fleet to search for active game sessions. You can use either the fleet ID or ARN value. Each request must reference either a fleet ID or alias ID, but not both.
+  --alias-id: string # A unique identifier for the alias associated with the fleet to search for active game sessions. You can use either the alias ID or ARN value. Each request must reference either a fleet ID or alias ID, but not both.
+  --location: string # A fleet location to search for game sessions. You can specify a fleet's home Region or a remote location. Use the Amazon Web Services Region code format, such as us-west-2.
+  --filter-expression: string # String containing the search criteria for the session search. If no filter expression is included, the request returns results for all game sessions in the fleet that are in ACTIVE status. A filter expression can contain one or multiple conditions. Each condition consists of the following: Operand -- Name of a game session attribute. Valid values are gameSessionName, gameSessionId, gameSessionProperties, maximumSessions, creationTimeMillis, playerSessionCount, hasAvailablePlayerSessions. Comparator -- Valid comparators are: =, <>, <, >, <=, >=. Value -- Value to be searched for. Values may be numbers, boolean values (true/false) or strings depending on the operand. String values are case sensitive and must be enclosed in single quotes. Special characters must be escaped. Boolean and string values can only be used with the comparators = and <>. For example, the following filter expression searches on gameSessionName: "FilterExpression": "gameSessionName = 'Matt\\'s Awesome Game 1'". To chain multiple conditions in a single expression, use the logical keywords AND, OR, and NOT and parentheses as needed. For example: x AND y AND NOT z, NOT (x OR y). Session search evaluates conditions from left to right using the following precedence rules: =, <>, <, >, <=, >= Parentheses NOT AND OR For example, this filter expression retrieves game sessions hosting at least ten players that have an open player slot: "maximumSessions>=10 AND hasAvailablePlayerSessions=true".
+  --sort-expression: string # Instructions on how to sort the search results. If no sort expression is included, the request returns results in random order. A sort expression consists of the following elements: Operand -- Name of a game session attribute. Valid values are gameSessionName, gameSessionId, gameSessionProperties, maximumSessions, creationTimeMillis, playerSessionCount, hasAvailablePlayerSessions. Order -- Valid sort orders are ASC (ascending) and DESC (descending). For example, this sort expression returns the oldest active sessions first: "SortExpression": "creationTimeMillis ASC". Results with a null value for the sort operand are returned at the end of the list.
+  --limit-body: int # The maximum number of results to return. Use this parameter with NextToken to get results as a set of sequential pages. The maximum number of results returned is 20, even if this value is not set or is set higher than 20. (body field)
+  --next-token-body: string # A token that indicates the start of the next sequential page of results. Use the token that is returned with a previous call to this operation. To start at the beginning of the result set, do not specify a value. (body field)
+]: any -> oneof<record<GameSessions: table<GameSessionId: string, Name: string, FleetId: string, FleetArn: string, CreationTime: string, TerminationTime: string, CurrentPlayerSessionCount: int, MaximumPlayerSessionCount: int, Status: string, StatusReason: string, GameProperties: list, IpAddress: string, DnsName: string, Port: int, PlayerSessionCreationPolicy: string, CreatorId: string, GameSessionData: string, MatchmakerData: string, Location: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "GameLift.SearchGameSessions")
   let qp = [(serialize-qp "Limit" $limit "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"FleetId": $fleet_id, "AliasId": $alias_id, "Location": $location, "FilterExpression": $filter_expression, "SortExpression": $sort_expression, "Limit": $limit_body, "NextToken": $next_token_body} | compact
@@ -4398,14 +4526,15 @@ export def "start-fleet-actions" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-81
-  fleet_id: any
-  actions: any
-  --location: any
-]: any -> record<FleetId: record, FleetArn: record> {
+  --x-amz-target: string@x-amz-target-completer-81 # required
+  fleet_id: string # A unique identifier for the fleet to restart actions on. You can use either the fleet ID or ARN value.
+  actions: list<string> # List of actions to restart on the fleet.
+  --location: string # The fleet location to restart fleet actions for. Specify a location in the form of an Amazon Web Services Region code, such as us-west-2.
+]: any -> oneof<record<FleetId: string, FleetArn: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "GameLift.StartFleetActions")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"FleetId": $fleet_id, "Actions": $actions, "Location": $location} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -4448,19 +4577,20 @@ export def "start-game-session-placement" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-82
-  placement_id: any
-  game_session_queue_name: any
-  --game-properties: any
-  maximum_player_session_count: any
-  --game-session-name: any
-  --player-latencies: any
-  --desired-player-sessions: any
-  --game-session-data: any
-]: any -> record<GameSessionPlacement: record<PlacementId: record, GameSessionQueueName: record, Status: record, GameProperties: record, MaximumPlayerSessionCount: record, GameSessionName: record, GameSessionId: record, GameSessionArn: record, GameSessionRegion: record, PlayerLatencies: record, StartTime: record, EndTime: record, IpAddress: record, DnsName: record, Port: record, PlacedPlayerSessions: record, GameSessionData: record, MatchmakerData: record>> {
+  --x-amz-target: string@x-amz-target-completer-82 # required
+  placement_id: string # A unique identifier to assign to the new game session placement. This value is developer-defined. The value must be unique across all Regions and cannot be reused.
+  game_session_queue_name: string # Name of the queue to use to place the new game session. You can use either the queue name or ARN value.
+  --game-properties: list # A set of custom properties for a game session, formatted as key:value pairs. These properties are passed to a game server process with a request to start a new game session (see Start a Game Session (https://docs.aws.amazon.com/gamelift/latest/developerguide/gamelift-sdk-server-api.html#gamelift-sdk-server-startsession)). — item shape: {Key: string, Value: string}
+  maximum_player_session_count: int # The maximum number of players that can be connected simultaneously to the game session.
+  --game-session-name: string # A descriptive label that is associated with a game session. Session names do not need to be unique.
+  --player-latencies: list # A set of values, expressed in milliseconds, that indicates the amount of latency that a player experiences when connected to Amazon Web Services Regions. This information is used to try to place the new game session where it can offer the best possible gameplay experience for the players. — item shape: {PlayerId?: string, RegionIdentifier?: string, LatencyInMilliseconds?: float}
+  --desired-player-sessions: list # Set of information on each player to create a player session for. — item shape: {PlayerId?: string, PlayerData?: string}
+  --game-session-data: string # A set of custom game session properties, formatted as a single string value. This data is passed to a game server process in the GameSession object with a request to start a new game session (see Start a Game Session (https://docs.aws.amazon.com/gamelift/latest/developerguide/gamelift-sdk-server-api.html#gamelift-sdk-server-startsession)).
+]: any -> oneof<record<GameSessionPlacement: record<PlacementId: string, GameSessionQueueName: string, Status: string, GameProperties: list<record>, MaximumPlayerSessionCount: int, GameSessionName: string, GameSessionId: string, GameSessionArn: string, GameSessionRegion: string, PlayerLatencies: list<record>, StartTime: string, EndTime: string, IpAddress: string, DnsName: string, Port: int, PlacedPlayerSessions: list<record>, GameSessionData: string, MatchmakerData: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "GameLift.StartGameSessionPlacement")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"PlacementId": $placement_id, "GameSessionQueueName": $game_session_queue_name, "GameProperties": $game_properties, "MaximumPlayerSessionCount": $maximum_player_session_count, "GameSessionName": $game_session_name, "PlayerLatencies": $player_latencies, "DesiredPlayerSessions": $desired_player_sessions, "GameSessionData": $game_session_data} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -4503,15 +4633,16 @@ export def "start-match-backfill" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-83
-  --ticket-id: any
-  configuration_name: any
-  --game-session-arn: any
-  players: any
-]: any -> record<MatchmakingTicket: record<TicketId: record, ConfigurationName: record, ConfigurationArn: record, Status: record, StatusReason: record, StatusMessage: record, StartTime: record, EndTime: record, Players: record, GameSessionConnectionInfo: record<GameSessionArn: record, IpAddress: record, DnsName: record, Port: record, MatchedPlayerSessions: record>, EstimatedWaitTime: record>> {
+  --x-amz-target: string@x-amz-target-completer-83 # required
+  --ticket-id: string # A unique identifier for a matchmaking ticket. If no ticket ID is specified here, Amazon GameLift will generate one in the form of a UUID. Use this identifier to track the match backfill ticket status and retrieve match results.
+  configuration_name: string # Name of the matchmaker to use for this request. You can use either the configuration name or ARN value. The ARN of the matchmaker that was used with the original game session is listed in the GameSession object, MatchmakerData property.
+  --game-session-arn: string # A unique identifier for the game session. Use the game session ID. When using FlexMatch as a standalone matchmaking solution, this parameter is not needed.
+  players: list # Match information on all players that are currently assigned to the game session. This information is used by the matchmaker to find new players and add them to the existing game. You can include up to 199 Players in a StartMatchBackfill request. PlayerID, PlayerAttributes, Team -- This information is maintained in the GameSession object, MatchmakerData property, for all players who are currently assigned to the game session. The matchmaker data is in JSON syntax, formatted as a string. For more details, see Match Data (https://docs.aws.amazon.com/gamelift/latest/flexmatchguide/match-server.html#match-server-data). The backfill request must specify the team membership for every player. Do not specify team if you are not using backfill. LatencyInMs -- If the matchmaker uses player latency, include a latency value, in milliseconds, for the Region that the game session is currently in. Do not include latency values for any other Region. — item shape: {PlayerId?: string, PlayerAttributes?: record, Team?: string, LatencyInMs?: record}
+]: any -> oneof<record<MatchmakingTicket: record<TicketId: string, ConfigurationName: string, ConfigurationArn: string, Status: string, StatusReason: string, StatusMessage: string, StartTime: string, EndTime: string, Players: list<record>, GameSessionConnectionInfo: record<GameSessionArn: string, IpAddress: string, DnsName: string, Port: int, MatchedPlayerSessions: list>, EstimatedWaitTime: int>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "GameLift.StartMatchBackfill")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"TicketId": $ticket_id, "ConfigurationName": $configuration_name, "GameSessionArn": $game_session_arn, "Players": $players} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -4554,14 +4685,15 @@ export def "start-matchmaking" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-84
-  --ticket-id: any
-  configuration_name: any
-  players: any
-]: any -> record<MatchmakingTicket: record<TicketId: record, ConfigurationName: record, ConfigurationArn: record, Status: record, StatusReason: record, StatusMessage: record, StartTime: record, EndTime: record, Players: record, GameSessionConnectionInfo: record<GameSessionArn: record, IpAddress: record, DnsName: record, Port: record, MatchedPlayerSessions: record>, EstimatedWaitTime: record>> {
+  --x-amz-target: string@x-amz-target-completer-84 # required
+  --ticket-id: string # A unique identifier for a matchmaking ticket. If no ticket ID is specified here, Amazon GameLift will generate one in the form of a UUID. Use this identifier to track the matchmaking ticket status and retrieve match results.
+  configuration_name: string # Name of the matchmaking configuration to use for this request. Matchmaking configurations must exist in the same Region as this request. You can use either the configuration name or ARN value.
+  players: list # Information on each player to be matched. This information must include a player ID, and may contain player attributes and latency data to be used in the matchmaking process. After a successful match, Player objects contain the name of the team the player is assigned to. You can include up to 10 Players in a StartMatchmaking request. — item shape: {PlayerId?: string, PlayerAttributes?: record, Team?: string, LatencyInMs?: record}
+]: any -> oneof<record<MatchmakingTicket: record<TicketId: string, ConfigurationName: string, ConfigurationArn: string, Status: string, StatusReason: string, StatusMessage: string, StartTime: string, EndTime: string, Players: list<record>, GameSessionConnectionInfo: record<GameSessionArn: string, IpAddress: string, DnsName: string, Port: int, MatchedPlayerSessions: list>, EstimatedWaitTime: int>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "GameLift.StartMatchmaking")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"TicketId": $ticket_id, "ConfigurationName": $configuration_name, "Players": $players} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -4604,14 +4736,15 @@ export def "stop-fleet-actions" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-85
-  fleet_id: any
-  actions: any
-  --location: any
-]: any -> record<FleetId: record, FleetArn: record> {
+  --x-amz-target: string@x-amz-target-completer-85 # required
+  fleet_id: string # A unique identifier for the fleet to stop actions on. You can use either the fleet ID or ARN value.
+  actions: list<string> # List of actions to suspend on the fleet.
+  --location: string # The fleet location to stop fleet actions for. Specify a location in the form of an Amazon Web Services Region code, such as us-west-2.
+]: any -> oneof<record<FleetId: string, FleetArn: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "GameLift.StopFleetActions")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"FleetId": $fleet_id, "Actions": $actions, "Location": $location} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -4654,12 +4787,13 @@ export def "stop-game-session-placement" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-86
-  placement_id: any
-]: any -> record<GameSessionPlacement: record<PlacementId: record, GameSessionQueueName: record, Status: record, GameProperties: record, MaximumPlayerSessionCount: record, GameSessionName: record, GameSessionId: record, GameSessionArn: record, GameSessionRegion: record, PlayerLatencies: record, StartTime: record, EndTime: record, IpAddress: record, DnsName: record, Port: record, PlacedPlayerSessions: record, GameSessionData: record, MatchmakerData: record>> {
+  --x-amz-target: string@x-amz-target-completer-86 # required
+  placement_id: string # A unique identifier for a game session placement to stop.
+]: any -> oneof<record<GameSessionPlacement: record<PlacementId: string, GameSessionQueueName: string, Status: string, GameProperties: list<record>, MaximumPlayerSessionCount: int, GameSessionName: string, GameSessionId: string, GameSessionArn: string, GameSessionRegion: string, PlayerLatencies: list<record>, StartTime: string, EndTime: string, IpAddress: string, DnsName: string, Port: int, PlacedPlayerSessions: list<record>, GameSessionData: string, MatchmakerData: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "GameLift.StopGameSessionPlacement")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"PlacementId": $placement_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -4702,12 +4836,13 @@ export def "stop-matchmaking" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-87
-  ticket_id: any
-]: any -> record {
+  --x-amz-target: string@x-amz-target-completer-87 # required
+  ticket_id: string # A unique identifier for a matchmaking ticket.
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "GameLift.StopMatchmaking")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"TicketId": $ticket_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -4750,13 +4885,14 @@ export def "suspend-game-server-group" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-88
-  game_server_group_name: any
-  suspend_actions: any
-]: any -> record<GameServerGroup: record<GameServerGroupName: record, GameServerGroupArn: record, RoleArn: record, InstanceDefinitions: record, BalancingStrategy: record, GameServerProtectionPolicy: record, AutoScalingGroupArn: record, Status: record, StatusReason: record, SuspendedActions: record, CreationTime: record, LastUpdatedTime: record>> {
+  --x-amz-target: string@x-amz-target-completer-88 # required
+  game_server_group_name: string # A unique identifier for the game server group. Use either the name or ARN value.
+  suspend_actions: list<string> # The activity to suspend for this game server group.
+]: any -> oneof<record<GameServerGroup: record<GameServerGroupName: string, GameServerGroupArn: string, RoleArn: string, InstanceDefinitions: list<record>, BalancingStrategy: string, GameServerProtectionPolicy: string, AutoScalingGroupArn: string, Status: string, StatusReason: string, SuspendedActions: list<string>, CreationTime: string, LastUpdatedTime: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "GameLift.SuspendGameServerGroup")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"GameServerGroupName": $game_server_group_name, "SuspendActions": $suspend_actions} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -4799,13 +4935,14 @@ export def "tag-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-89
-  resource_arn: any
-  tags: any
-]: any -> record {
+  --x-amz-target: string@x-amz-target-completer-89 # required
+  resource_arn: string # The Amazon Resource Name (ARN (https://docs.aws.amazon.com/AmazonS3/latest/dev/s3-arn-format.html)) that uniquely identifies the Amazon GameLift resource that you want to assign tags to. Amazon GameLift includes resource ARNs in the data object for the resource. You can retrieve the ARN by calling a List or Describe operation for the resource type.
+  tags: list # A list of one or more tags to assign to the specified Amazon GameLift resource. Tags are developer-defined and structured as key-value pairs. The maximum tag limit may be lower than stated. See Tagging Amazon Web Services Resources (https://docs.aws.amazon.com/general/latest/gr/aws_tagging.html) for tagging limits. — item shape: {Key: string, Value: string}
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "GameLift.TagResource")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ResourceARN": $resource_arn, "Tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -4848,13 +4985,14 @@ export def "untag-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-90
-  resource_arn: any
-  tag_keys: any
-]: any -> record {
+  --x-amz-target: string@x-amz-target-completer-90 # required
+  resource_arn: string # The Amazon Resource Name (ARN (https://docs.aws.amazon.com/AmazonS3/latest/dev/s3-arn-format.html)) that uniquely identifies the Amazon GameLift resource that you want to remove tags from. Amazon GameLift includes resource ARNs in the data object for the resource. You can retrieve the ARN by calling a List or Describe operation for the resource type.
+  tag_keys: list<string> # A list of one or more tag keys to remove from the specified Amazon GameLift resource.
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "GameLift.UntagResource")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ResourceARN": $resource_arn, "TagKeys": $tag_keys} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -4897,15 +5035,16 @@ export def "update-alias" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-91
-  alias_id: any
-  --name: any
-  --description: any
-  --routing-strategy: any
-]: any -> record<Alias: record<AliasId: record, Name: record, AliasArn: record, Description: record, RoutingStrategy: record<Type: record, FleetId: record, Message: record>, CreationTime: record, LastUpdatedTime: record>> {
+  --x-amz-target: string@x-amz-target-completer-91 # required
+  alias_id: string # A unique identifier for the alias that you want to update. You can use either the alias ID or ARN value.
+  --name: string # A descriptive label that is associated with an alias. Alias names do not need to be unique.
+  --description: string # A human-readable description of the alias.
+  --routing-strategy: record # The routing configuration for a fleet alias. Related actions All APIs by task (https://docs.aws.amazon.com/gamelift/latest/developerguide/reference-awssdk.html#reference-awssdk-resources-fleets) — shape: {Type?: "SIMPLE"|"TERMINAL", FleetId?: string, Message?: string}
+]: any -> oneof<record<Alias: record<AliasId: string, Name: string, AliasArn: string, Description: string, RoutingStrategy: record<Type: string, FleetId: string, Message: string>, CreationTime: string, LastUpdatedTime: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "GameLift.UpdateAlias")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"AliasId": $alias_id, "Name": $name, "Description": $description, "RoutingStrategy": $routing_strategy} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -4948,14 +5087,15 @@ export def "update-build" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-92
-  build_id: any
-  --name: any
-  --version: any
-]: any -> record<Build: record<BuildId: record, BuildArn: record, Name: record, Version: record, Status: record, SizeOnDisk: record, OperatingSystem: record, CreationTime: record, ServerSdkVersion: record>> {
+  --x-amz-target: string@x-amz-target-completer-92 # required
+  build_id: string # A unique identifier for the build to update. You can use either the build ID or ARN value.
+  --name: string # A descriptive label associated with a build. Build names don't need to be unique.
+  --version: string # Version information associated with a build or script. Version strings don't need to be unique.
+]: any -> oneof<record<Build: record<BuildId: string, BuildArn: string, Name: string, Version: string, Status: string, SizeOnDisk: int, OperatingSystem: string, CreationTime: string, ServerSdkVersion: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "GameLift.UpdateBuild")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"BuildId": $build_id, "Name": $name, "Version": $version} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -4998,18 +5138,19 @@ export def "update-fleet-attributes" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-93
-  fleet_id: any
-  --name: any
-  --description: any
-  --new-game-session-protection-policy: any
-  --resource-creation-limit-policy: any
-  --metric-groups: any
-  --anywhere-configuration: any
-]: any -> record<FleetId: record, FleetArn: record> {
+  --x-amz-target: string@x-amz-target-completer-93 # required
+  fleet_id: string # A unique identifier for the fleet to update attribute metadata for. You can use either the fleet ID or ARN value.
+  --name: string # A descriptive label that is associated with a fleet. Fleet names do not need to be unique.
+  --description: string # A human-readable description of a fleet.
+  --new-game-session-protection-policy: string@new-game-session-protection-policy-completer # The game session protection policy to apply to all new instances created in this fleet. Instances that already exist are not affected. You can set protection for individual instances using UpdateGameSession (https://docs.aws.amazon.com/gamelift/latest/apireference/API_UpdateGameSession.html) . NoProtection -- The game session can be terminated during a scale-down event. FullProtection -- If the game session is in an ACTIVE status, it cannot be terminated during a scale-down event.
+  --resource-creation-limit-policy: record # A policy that puts limits on the number of game sessions that a player can create within a specified span of time. With this policy, you can control players' ability to consume available resources. The policy is evaluated when a player tries to create a new game session. On receiving a CreateGameSession request, Amazon GameLift checks that the player (identified by CreatorId) has created fewer than game session limit in the specified time period. — shape: {NewGameSessionsPerCreator?: int, PolicyPeriodInMinutes?: int}
+  --metric-groups: list<string> # The name of a metric group to add this fleet to. Use a metric group in Amazon CloudWatch to aggregate the metrics from multiple fleets. Provide an existing metric group name, or create a new metric group by providing a new name. A fleet can only be in one metric group at a time.
+  --anywhere-configuration: record # Amazon GameLift Anywhere configuration options for your Anywhere fleets. — shape: {Cost: string}
+]: any -> oneof<record<FleetId: string, FleetArn: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "GameLift.UpdateFleetAttributes")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"FleetId": $fleet_id, "Name": $name, "Description": $description, "NewGameSessionProtectionPolicy": $new_game_session_protection_policy, "ResourceCreationLimitPolicy": $resource_creation_limit_policy, "MetricGroups": $metric_groups, "AnywhereConfiguration": $anywhere_configuration} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -5052,16 +5193,17 @@ export def "update-fleet-capacity" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-94
-  fleet_id: any
-  --desired-instances: any
-  --min-size: any
-  --max-size: any
-  --location: any
-]: any -> record<FleetId: record, FleetArn: record, Location: record> {
+  --x-amz-target: string@x-amz-target-completer-94 # required
+  fleet_id: string # A unique identifier for the fleet to update capacity settings for. You can use either the fleet ID or ARN value.
+  --desired-instances: int # The number of Amazon EC2 instances you want to maintain in the specified fleet location. This value must fall between the minimum and maximum size limits.
+  --min-size: int # The minimum number of instances that are allowed in the specified fleet location. If this parameter is not set, the default is 0.
+  --max-size: int # The maximum number of instances that are allowed in the specified fleet location. If this parameter is not set, the default is 1.
+  --location: string # The name of a remote location to update fleet capacity settings for, in the form of an Amazon Web Services Region code such as us-west-2.
+]: any -> oneof<record<FleetId: string, FleetArn: string, Location: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "GameLift.UpdateFleetCapacity")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"FleetId": $fleet_id, "DesiredInstances": $desired_instances, "MinSize": $min_size, "MaxSize": $max_size, "Location": $location} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -5104,14 +5246,15 @@ export def "update-fleet-port-settings" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-95
-  fleet_id: any
-  --inbound-permission-authorizations: any
-  --inbound-permission-revocations: any
-]: any -> record<FleetId: record, FleetArn: record> {
+  --x-amz-target: string@x-amz-target-completer-95 # required
+  fleet_id: string # A unique identifier for the fleet to update port settings for. You can use either the fleet ID or ARN value.
+  --inbound-permission-authorizations: list # A collection of port settings to be added to the fleet resource. — item shape: {FromPort: int, ToPort: int, IpRange: string, Protocol: "TCP"|"UDP"}
+  --inbound-permission-revocations: list # A collection of port settings to be removed from the fleet resource. — item shape: {FromPort: int, ToPort: int, IpRange: string, Protocol: "TCP"|"UDP"}
+]: any -> oneof<record<FleetId: string, FleetArn: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "GameLift.UpdateFleetPortSettings")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"FleetId": $fleet_id, "InboundPermissionAuthorizations": $inbound_permission_authorizations, "InboundPermissionRevocations": $inbound_permission_revocations} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -5154,16 +5297,17 @@ export def "update-game-server" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-96
-  game_server_group_name: any
-  game_server_id: any
-  --game-server-data: any
-  --utilization-status: any
-  --health-check: any
-]: any -> record<GameServer: record<GameServerGroupName: record, GameServerGroupArn: record, GameServerId: record, InstanceId: record, ConnectionInfo: record, GameServerData: record, ClaimStatus: record, UtilizationStatus: record, RegistrationTime: record, LastClaimTime: record, LastHealthCheckTime: record>> {
+  --x-amz-target: string@x-amz-target-completer-96 # required
+  game_server_group_name: string # A unique identifier for the game server group where the game server is running.
+  game_server_id: string # A custom string that uniquely identifies the game server to update.
+  --game-server-data: string # A set of custom game server properties, formatted as a single string value. This data is passed to a game client or service when it requests information on game servers.
+  --utilization-status: string@utilization-status-completer # Indicates whether the game server is available or is currently hosting gameplay.
+  --health-check: string@health-check-completer # Indicates health status of the game server. A request that includes this parameter updates the game server's LastHealthCheckTime timestamp.
+]: any -> oneof<record<GameServer: record<GameServerGroupName: string, GameServerGroupArn: string, GameServerId: string, InstanceId: string, ConnectionInfo: string, GameServerData: string, ClaimStatus: string, UtilizationStatus: string, RegistrationTime: string, LastClaimTime: string, LastHealthCheckTime: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "GameLift.UpdateGameServer")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"GameServerGroupName": $game_server_group_name, "GameServerId": $game_server_id, "GameServerData": $game_server_data, "UtilizationStatus": $utilization_status, "HealthCheck": $health_check} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -5206,16 +5350,17 @@ export def "update-game-server-group" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-97
-  game_server_group_name: any
-  --role-arn: any
-  --instance-definitions: any
-  --game-server-protection-policy: any
-  --balancing-strategy: any
-]: any -> record<GameServerGroup: record<GameServerGroupName: record, GameServerGroupArn: record, RoleArn: record, InstanceDefinitions: record, BalancingStrategy: record, GameServerProtectionPolicy: record, AutoScalingGroupArn: record, Status: record, StatusReason: record, SuspendedActions: record, CreationTime: record, LastUpdatedTime: record>> {
+  --x-amz-target: string@x-amz-target-completer-97 # required
+  game_server_group_name: string # A unique identifier for the game server group. Use either the name or ARN value.
+  --role-arn: string # The Amazon Resource Name (ARN (https://docs.aws.amazon.com/AmazonS3/latest/dev/s3-arn-format.html)) for an IAM role that allows Amazon GameLift to access your Amazon EC2 Auto Scaling groups.
+  --instance-definitions: list # An updated list of Amazon EC2 instance types to use in the Auto Scaling group. The instance definitions must specify at least two different instance types that are supported by Amazon GameLift FleetIQ. This updated list replaces the entire current list of instance definitions for the game server group. For more information on instance types, see EC2 Instance Types (https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/instance-types.html) in the Amazon EC2 User Guide. You can optionally specify capacity weighting for each instance type. If no weight value is specified for an instance type, it is set to the default value "1". For more information about capacity weighting, see Instance Weighting for Amazon EC2 Auto Scaling (https://docs.aws.amazon.com/autoscaling/ec2/userguide/asg-instance-weighting.html) in the Amazon EC2 Auto Scaling User Guide. — item shape: {InstanceType: "c4.large"|"c4.xlarge"|"c4.2xlarge"|"c4.4xlarge"|"c4.8xlarge"|"c5.large"|"c5.xlarge"|"c5.2xlarge"|"c5.4xlarge"|"c5.9xlarge"|"c5.12xlarge"|"c5.18xlarge"|"c5.24xlarge"|"c5a.large"|"c5a.xlarge"|"c5a.2xlarge"|"c5a.4xlarge"|"c5a.8xlarge"|"c5a.12xlarge"|"c5a.16xlarge"|"c5a.24xlarge"|"c6g.medium"|"c6g.large"|"c6g.xlarge"|"c6g.2xlarge"|"c6g.4xlarge"|"c6g.8xlarge"|"c6g.12xlarge"|"c6g.16xlarge"|"r4.large"|"r4.xlarge"|"r4.2xlarge"|"r4.4xlarge"|"r4.8xlarge"|"r4.16xlarge"|"r5.large"|"r5.xlarge"|"r5.2xlarge"|"r5.4xlarge"|"r5.8xlarge"|"r5.12xlarge"|"r5.16xlarge"|"r5.24xlarge"|"r5a.large"|"r5a.xlarge"|"r5a.2xlarge"|"r5a.4xlarge"|"r5a.8xlarge"|"r5a.12xlarge"|"r5a.16xlarge"|"r5a.24xlarge"|"r6g.medium"|"r6g.large"|"r6g.xlarge"|"r6g.2xlarge"|"r6g.4xlarge"|"r6g.8xlarge"|"r6g.12xlarge"|"r6g.16xlarge"|"m4.large"|"m4.xlarge"|"m4.2xlarge"|"m4.4xlarge"|"m4.10xlarge"|"m5.large"|"m5.xlarge"|"m5.2xlarge"|"m5.4xlarge"|"m5.8xlarge"|"m5.12xlarge"|"m5.16xlarge"|"m5.24xlarge"|"m5a.large"|"m5a.xlarge"|"m5a.2xlarge"|"m5a.4xlarge"|"m5a.8xlarge"|"m5a.12xlarge"|"m5a.16xlarge"|"m5a.24xlarge"|"m6g.medium"|"m6g.large"|"m6g.xlarge"|"m6g.2xlarge"|"m6g.4xlarge"|"m6g.8xlarge"|"m6g.12xlarge"|"m6g.16xlarge", ... (1 more fields)}
+  --game-server-protection-policy: string@game-server-protection-policy-completer # A flag that indicates whether instances in the game server group are protected from early termination. Unprotected instances that have active game servers running might be terminated during a scale-down event, causing players to be dropped from the game. Protected instances cannot be terminated while there are active game servers running except in the event of a forced game server group deletion (see ). An exception to this is with Spot Instances, which can be terminated by Amazon Web Services regardless of protection status. This property is set to NO_PROTECTION by default.
+  --balancing-strategy: string@balancing-strategy-completer # Indicates how Amazon GameLift FleetIQ balances the use of Spot Instances and On-Demand Instances in the game server group. Method options include the following: SPOT_ONLY - Only Spot Instances are used in the game server group. If Spot Instances are unavailable or not viable for game hosting, the game server group provides no hosting capacity until Spot Instances can again be used. Until then, no new instances are started, and the existing nonviable Spot Instances are terminated (after current gameplay ends) and are not replaced. SPOT_PREFERRED - (default value) Spot Instances are used whenever available in the game server group. If Spot Instances are unavailable, the game server group continues to provide hosting capacity by falling back to On-Demand Instances. Existing nonviable Spot Instances are terminated (after current gameplay ends) and are replaced with new On-Demand Instances. ON_DEMAND_ONLY - Only On-Demand Instances are used in the game server group. No Spot Instances are used, even when available, while this balancing strategy is in force.
+]: any -> oneof<record<GameServerGroup: record<GameServerGroupName: string, GameServerGroupArn: string, RoleArn: string, InstanceDefinitions: list<record>, BalancingStrategy: string, GameServerProtectionPolicy: string, AutoScalingGroupArn: string, Status: string, StatusReason: string, SuspendedActions: list<string>, CreationTime: string, LastUpdatedTime: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "GameLift.UpdateGameServerGroup")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"GameServerGroupName": $game_server_group_name, "RoleArn": $role_arn, "InstanceDefinitions": $instance_definitions, "GameServerProtectionPolicy": $game_server_protection_policy, "BalancingStrategy": $balancing_strategy} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -5258,16 +5403,17 @@ export def "update-game-session" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-98
-  game_session_id: any
-  --maximum-player-session-count: any
-  --name: any
-  --player-session-creation-policy: any
-  --protection-policy: any
-]: any -> record<GameSession: record<GameSessionId: record, Name: record, FleetId: record, FleetArn: record, CreationTime: record, TerminationTime: record, CurrentPlayerSessionCount: record, MaximumPlayerSessionCount: record, Status: record, StatusReason: record, GameProperties: record, IpAddress: record, DnsName: record, Port: record, PlayerSessionCreationPolicy: record, CreatorId: record, GameSessionData: record, MatchmakerData: record, Location: record>> {
+  --x-amz-target: string@x-amz-target-completer-98 # required
+  game_session_id: string # A unique identifier for the game session to update.
+  --maximum-player-session-count: int # The maximum number of players that can be connected simultaneously to the game session.
+  --name: string # A descriptive label that is associated with a game session. Session names do not need to be unique.
+  --player-session-creation-policy: string@player-session-creation-policy-completer # A policy that determines whether the game session is accepting new players.
+  --protection-policy: string@protection-policy-completer # Game session protection policy to apply to this game session only. NoProtection -- The game session can be terminated during a scale-down event. FullProtection -- If the game session is in an ACTIVE status, it cannot be terminated during a scale-down event.
+]: any -> oneof<record<GameSession: record<GameSessionId: string, Name: string, FleetId: string, FleetArn: string, CreationTime: string, TerminationTime: string, CurrentPlayerSessionCount: int, MaximumPlayerSessionCount: int, Status: string, StatusReason: string, GameProperties: list<record>, IpAddress: string, DnsName: string, Port: int, PlayerSessionCreationPolicy: string, CreatorId: string, GameSessionData: string, MatchmakerData: string, Location: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "GameLift.UpdateGameSession")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"GameSessionId": $game_session_id, "MaximumPlayerSessionCount": $maximum_player_session_count, "Name": $name, "PlayerSessionCreationPolicy": $player_session_creation_policy, "ProtectionPolicy": $protection_policy} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -5310,19 +5456,20 @@ export def "update-game-session-queue" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-99
-  name: any
-  --timeout-in-seconds: any
-  --player-latency-policies: any
-  --destinations: any
-  --filter-configuration: any
-  --priority-configuration: any
-  --custom-event-data: any
-  --notification-target: any
-]: any -> record<GameSessionQueue: record<Name: record, GameSessionQueueArn: record, TimeoutInSeconds: record, PlayerLatencyPolicies: record, Destinations: record, FilterConfiguration: record<AllowedLocations: record>, PriorityConfiguration: record<PriorityOrder: record, LocationOrder: record>, CustomEventData: record, NotificationTarget: record>> {
+  --x-amz-target: string@x-amz-target-completer-99 # required
+  name: string # A descriptive label that is associated with game session queue. Queue names must be unique within each Region. You can use either the queue ID or ARN value.
+  --timeout-in-seconds: int # The maximum time, in seconds, that a new game session placement request remains in the queue. When a request exceeds this time, the game session placement changes to a TIMED_OUT status.
+  --player-latency-policies: list # A set of policies that act as a sliding cap on player latency. FleetIQ works to deliver low latency for most players in a game session. These policies ensure that no individual player can be placed into a game with unreasonably high latency. Use multiple policies to gradually relax latency requirements a step at a time. Multiple policies are applied based on their maximum allowed latency, starting with the lowest value. When updating policies, provide a complete collection of policies. — item shape: {MaximumIndividualPlayerLatencyMilliseconds?: int, PolicyDurationSeconds?: int}
+  --destinations: list # A list of fleets and/or fleet aliases that can be used to fulfill game session placement requests in the queue. Destinations are identified by either a fleet ARN or a fleet alias ARN, and are listed in order of placement preference. When updating this list, provide a complete list of destinations. — item shape: {DestinationArn?: string}
+  --filter-configuration: record # A list of fleet locations where a game session queue can place new game sessions. You can use a filter to temporarily turn off placements for specific locations. For queues that have multi-location fleets, you can use a filter configuration allow placement with some, but not all of these locations. — shape: {AllowedLocations?: list<string>}
+  --priority-configuration: record # Custom prioritization settings for use by a game session queue when placing new game sessions with available game servers. When defined, this configuration replaces the default FleetIQ prioritization process, which is as follows: If player latency data is included in a game session request, destinations and locations are prioritized first based on lowest average latency (1), then on lowest hosting cost (2), then on destination list order (3), and finally on location (alphabetical) (4). This approach ensures that the queue's top priority is to place game sessions where average player latency is lowest, and--if latency is the same--where the hosting cost is less, etc. If player latency data is not included, destinations and locations are prioritized first on destination list order (1), and then on location (alphabetical) (2). This approach ensures that the queue's top priority is to place game sessions on the first destination fleet listed. If that fleet has multiple locations, the game session is placed on the first location (when listed alphabetically). Changing the priority order will affect how game sessions are placed. — shape: {PriorityOrder?: list<string>, LocationOrder?: list<string>}
+  --custom-event-data: string # Information to be added to all events that are related to this game session queue.
+  --notification-target: string # An SNS topic ARN that is set up to receive game session placement notifications. See Setting up notifications for game session placement (https://docs.aws.amazon.com/gamelift/latest/developerguide/queue-notification.html).
+]: any -> oneof<record<GameSessionQueue: record<Name: string, GameSessionQueueArn: string, TimeoutInSeconds: int, PlayerLatencyPolicies: list<record>, Destinations: list<record>, FilterConfiguration: record<AllowedLocations: list>, PriorityConfiguration: record<PriorityOrder: list, LocationOrder: list>, CustomEventData: string, NotificationTarget: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "GameLift.UpdateGameSessionQueue")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Name": $name, "TimeoutInSeconds": $timeout_in_seconds, "PlayerLatencyPolicies": $player_latency_policies, "Destinations": $destinations, "FilterConfiguration": $filter_configuration, "PriorityConfiguration": $priority_configuration, "CustomEventData": $custom_event_data, "NotificationTarget": $notification_target} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -5365,25 +5512,26 @@ export def "update-matchmaking-configuration" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-100
-  name: any
-  --description: any
-  --game-session-queue-arns: any
-  --request-timeout-seconds: any
-  --acceptance-timeout-seconds: any
-  --acceptance-required: any
-  --rule-set-name: any
-  --notification-target: any
-  --additional-player-count: any
-  --custom-event-data: any
-  --game-properties: any
-  --game-session-data: any
-  --backfill-mode: any
-  --flex-match-mode: any
-]: any -> record<Configuration: record<Name: record, ConfigurationArn: record, Description: record, GameSessionQueueArns: record, RequestTimeoutSeconds: record, AcceptanceTimeoutSeconds: record, AcceptanceRequired: record, RuleSetName: record, RuleSetArn: record, NotificationTarget: record, AdditionalPlayerCount: record, CustomEventData: record, CreationTime: record, GameProperties: record, GameSessionData: record, BackfillMode: record, FlexMatchMode: record>> {
+  --x-amz-target: string@x-amz-target-completer-100 # required
+  name: string # A unique identifier for the matchmaking configuration to update. You can use either the configuration name or ARN value.
+  --description: string # A description for the matchmaking configuration.
+  --game-session-queue-arns: list<string> # The Amazon Resource Name (ARN (https://docs.aws.amazon.com/AmazonS3/latest/dev/s3-arn-format.html)) that is assigned to a Amazon GameLift game session queue resource and uniquely identifies it. ARNs are unique across all Regions. Format is arn:aws:gamelift:<region>::gamesessionqueue/<queue name>. Queues can be located in any Region. Queues are used to start new Amazon GameLift-hosted game sessions for matches that are created with this matchmaking configuration. If FlexMatchMode is set to STANDALONE, do not set this parameter.
+  --request-timeout-seconds: int # The maximum duration, in seconds, that a matchmaking ticket can remain in process before timing out. Requests that fail due to timing out can be resubmitted as needed.
+  --acceptance-timeout-seconds: int # The length of time (in seconds) to wait for players to accept a proposed match, if acceptance is required.
+  --acceptance-required: oneof<nothing, bool> # A flag that indicates whether a match that was created with this configuration must be accepted by the matched players. To require acceptance, set to TRUE. With this option enabled, matchmaking tickets use the status REQUIRES_ACCEPTANCE to indicate when a completed potential match is waiting for player acceptance.
+  --rule-set-name: string # A unique identifier for the matchmaking rule set to use with this configuration. You can use either the rule set name or ARN value. A matchmaking configuration can only use rule sets that are defined in the same Region.
+  --notification-target: string # An SNS topic ARN that is set up to receive matchmaking notifications. See Setting up notifications for matchmaking (https://docs.aws.amazon.com/gamelift/latest/flexmatchguide/match-notification.html) for more information.
+  --additional-player-count: int # The number of player slots in a match to keep open for future players. For example, if the configuration's rule set specifies a match for a single 12-person team, and the additional player count is set to 2, only 10 players are selected for the match. This parameter is not used if FlexMatchMode is set to STANDALONE.
+  --custom-event-data: string # Information to add to all events related to the matchmaking configuration.
+  --game-properties: list # A set of custom properties for a game session, formatted as key:value pairs. These properties are passed to a game server process with a request to start a new game session (see Start a Game Session (https://docs.aws.amazon.com/gamelift/latest/developerguide/gamelift-sdk-server-api.html#gamelift-sdk-server-startsession)). This information is added to the new GameSession object that is created for a successful match. This parameter is not used if FlexMatchMode is set to STANDALONE. — item shape: {Key: string, Value: string}
+  --game-session-data: string # A set of custom game session properties, formatted as a single string value. This data is passed to a game server process with a request to start a new game session (see Start a Game Session (https://docs.aws.amazon.com/gamelift/latest/developerguide/gamelift-sdk-server-api.html#gamelift-sdk-server-startsession)). This information is added to the game session that is created for a successful match. This parameter is not used if FlexMatchMode is set to STANDALONE.
+  --backfill-mode: string@backfill-mode-completer # The method that is used to backfill game sessions created with this matchmaking configuration. Specify MANUAL when your game manages backfill requests manually or does not use the match backfill feature. Specify AUTOMATIC to have GameLift create a match backfill request whenever a game session has one or more open slots. Learn more about manual and automatic backfill in Backfill Existing Games with FlexMatch (https://docs.aws.amazon.com/gamelift/latest/flexmatchguide/match-backfill.html). Automatic backfill is not available when FlexMatchMode is set to STANDALONE.
+  --flex-match-mode: string@flex-match-mode-completer # Indicates whether this matchmaking configuration is being used with Amazon GameLift hosting or as a standalone matchmaking solution. STANDALONE - FlexMatch forms matches and returns match information, including players and team assignments, in a MatchmakingSucceeded (https://docs.aws.amazon.com/gamelift/latest/flexmatchguide/match-events.html#match-events-matchmakingsucceeded) event. WITH_QUEUE - FlexMatch forms matches and uses the specified Amazon GameLift queue to start a game session for the match.
+]: any -> oneof<record<Configuration: record<Name: string, ConfigurationArn: string, Description: string, GameSessionQueueArns: list<string>, RequestTimeoutSeconds: int, AcceptanceTimeoutSeconds: int, AcceptanceRequired: bool, RuleSetName: string, RuleSetArn: string, NotificationTarget: string, AdditionalPlayerCount: int, CustomEventData: string, CreationTime: string, GameProperties: list<record>, GameSessionData: string, BackfillMode: string, FlexMatchMode: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "GameLift.UpdateMatchmakingConfiguration")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Name": $name, "Description": $description, "GameSessionQueueArns": $game_session_queue_arns, "RequestTimeoutSeconds": $request_timeout_seconds, "AcceptanceTimeoutSeconds": $acceptance_timeout_seconds, "AcceptanceRequired": $acceptance_required, "RuleSetName": $rule_set_name, "NotificationTarget": $notification_target, "AdditionalPlayerCount": $additional_player_count, "CustomEventData": $custom_event_data, "GameProperties": $game_properties, "GameSessionData": $game_session_data, "BackfillMode": $backfill_mode, "FlexMatchMode": $flex_match_mode} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -5426,13 +5574,14 @@ export def "update-runtime-configuration" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-101
-  fleet_id: any
-  runtime_configuration: any
-]: any -> record<RuntimeConfiguration: record<ServerProcesses: record, MaxConcurrentGameSessionActivations: record, GameSessionActivationTimeoutSeconds: record>> {
+  --x-amz-target: string@x-amz-target-completer-101 # required
+  fleet_id: string # A unique identifier for the fleet to update runtime configuration for. You can use either the fleet ID or ARN value.
+  runtime_configuration: record # A collection of server process configurations that describe the set of processes to run on each instance in a fleet. Server processes run either an executable in a custom game build or a Realtime Servers script. Amazon GameLift launches the configured processes, manages their life cycle, and replaces them as needed. Each instance checks regularly for an updated runtime configuration. A Amazon GameLift instance is limited to 50 processes running concurrently. To calculate the total number of processes in a runtime configuration, add the values of the ConcurrentExecutions parameter for each server process. Learn more about Running Multiple Processes on a Fleet (https://docs.aws.amazon.com/gamelift/latest/developerguide/fleets-multiprocess.html). — shape: {ServerProcesses?: list, MaxConcurrentGameSessionActivations?: int, GameSessionActivationTimeoutSeconds?: int}
+]: any -> oneof<record<RuntimeConfiguration: record<ServerProcesses: list<record>, MaxConcurrentGameSessionActivations: int, GameSessionActivationTimeoutSeconds: int>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "GameLift.UpdateRuntimeConfiguration")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"FleetId": $fleet_id, "RuntimeConfiguration": $runtime_configuration} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -5475,16 +5624,17 @@ export def "update-script" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-102
-  script_id: any
-  --name: any
-  --version: any
-  --storage-location: any
-  --zip-file: any
-]: any -> record<Script: record<ScriptId: record, ScriptArn: record, Name: record, Version: record, SizeOnDisk: record, CreationTime: record, StorageLocation: record<Bucket: record, Key: record, RoleArn: record, ObjectVersion: record>>> {
+  --x-amz-target: string@x-amz-target-completer-102 # required
+  script_id: string # A unique identifier for the Realtime script to update. You can use either the script ID or ARN value.
+  --name: string # A descriptive label that is associated with a script. Script names don't need to be unique.
+  --version: string # Version information associated with a build or script. Version strings don't need to be unique.
+  --storage-location: record # The location in Amazon S3 where build or script files are stored for access by Amazon GameLift. — shape: {Bucket?: string, Key?: string, RoleArn?: string, ObjectVersion?: string}
+  --zip-file: string # A data object containing your Realtime scripts and dependencies as a zip file. The zip file can have one or multiple files. Maximum size of a zip file is 5 MB. When using the Amazon Web Services CLI tool to create a script, this parameter is set to the zip file name. It must be prepended with the string "fileb://" to indicate that the file data is a binary object. For example: --zip-file fileb://myRealtimeScript.zip.
+]: any -> oneof<record<Script: record<ScriptId: string, ScriptArn: string, Name: string, Version: string, SizeOnDisk: int, CreationTime: string, StorageLocation: record<Bucket: string, Key: string, RoleArn: string, ObjectVersion: string>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "GameLift.UpdateScript")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ScriptId": $script_id, "Name": $name, "Version": $version, "StorageLocation": $storage_location, "ZipFile": $zip_file} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -5527,12 +5677,13 @@ export def "validate-matchmaking-rule-set" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-103
-  rule_set_body: any
-]: any -> record<Valid: record> {
+  --x-amz-target: string@x-amz-target-completer-103 # required
+  rule_set_body: string # A collection of matchmaking rules to validate, formatted as a JSON string.
+]: any -> oneof<record<Valid: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "GameLift.ValidateMatchmakingRuleSet")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"RuleSetBody": $rule_set_body} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }

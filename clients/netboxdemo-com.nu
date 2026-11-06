@@ -12,28 +12,37 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,7 +111,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -156,9 +180,9 @@ def status-completer-9 [] { ["active" "decommissioning" "failed" "offline" "plan
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "circuits-circuit-terminations-list" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["circuits-circuit-terminations-list" "circuits-circuit-terminations-create" "circuits-circuit-terminations-delete" "circuits-circuit-terminations-read" "circuits-circuit-terminations-partial-update" "circuits-circuit-terminations-update" "circuits-circuit-types-list" "circuits-circuit-types-create" "circuits-circuit-types-delete" "circuits-circuit-types-read" "circuits-circuit-types-partial-update" "circuits-circuit-types-update" "circuits-circuits-list" "circuits-circuits-create" "circuits-circuits-delete" "circuits-circuits-read" "circuits-circuits-partial-update" "circuits-circuits-update" "circuits-providers-list" "circuits-providers-create" "circuits-providers-delete" "circuits-providers-read" "circuits-providers-partial-update" "circuits-providers-update" "circuits-providers-graphs" "dcim-cables-list" "dcim-cables-create" "dcim-cables-delete" "dcim-cables-read" "dcim-cables-partial-update" "dcim-cables-update" "dcim-connected-device-list" "dcim-console-connections-list" "dcim-console-port-templates-list" "dcim-console-port-templates-create" "dcim-console-port-templates-delete" "dcim-console-port-templates-read" "dcim-console-port-templates-partial-update" "dcim-console-port-templates-update" "dcim-console-ports-list" "dcim-console-ports-create" "dcim-console-ports-delete" "dcim-console-ports-read" "dcim-console-ports-partial-update" "dcim-console-ports-update" "dcim-console-ports-trace" "dcim-console-server-port-templates-list" "dcim-console-server-port-templates-create" "dcim-console-server-port-templates-delete" "dcim-console-server-port-templates-read" "dcim-console-server-port-templates-partial-update" "dcim-console-server-port-templates-update" "dcim-console-server-ports-list" "dcim-console-server-ports-create" "dcim-console-server-ports-delete" "dcim-console-server-ports-read" "dcim-console-server-ports-partial-update" "dcim-console-server-ports-update" "dcim-console-server-ports-trace" "dcim-device-bay-templates-list" "dcim-device-bay-templates-create" "dcim-device-bay-templates-delete" "dcim-device-bay-templates-read" "dcim-device-bay-templates-partial-update" "dcim-device-bay-templates-update" "dcim-device-bays-list" "dcim-device-bays-create" "dcim-device-bays-delete" "dcim-device-bays-read" "dcim-device-bays-partial-update" "dcim-device-bays-update" "dcim-device-roles-list" "dcim-device-roles-create" "dcim-device-roles-delete" "dcim-device-roles-read" "dcim-device-roles-partial-update" "dcim-device-roles-update" "dcim-device-types-list" "dcim-device-types-create" "dcim-device-types-delete" "dcim-device-types-read" "dcim-device-types-partial-update" "dcim-device-types-update" "dcim-devices-list" "dcim-devices-create" "dcim-devices-delete" "dcim-devices-read" "dcim-devices-partial-update" "dcim-devices-update" "dcim-devices-graphs" "dcim-devices-napalm" "dcim-front-port-templates-list" "dcim-front-port-templates-create" "dcim-front-port-templates-delete" "dcim-front-port-templates-read" "dcim-front-port-templates-partial-update" "dcim-front-port-templates-update" "dcim-front-ports-list" "dcim-front-ports-create" "dcim-front-ports-delete" "dcim-front-ports-read" "dcim-front-ports-partial-update" "dcim-front-ports-update" "dcim-front-ports-trace" "dcim-interface-connections-list" "dcim-interface-templates-list" "dcim-interface-templates-create" "dcim-interface-templates-delete" "dcim-interface-templates-read" "dcim-interface-templates-partial-update" "dcim-interface-templates-update" "dcim-interfaces-list" "dcim-interfaces-create" "dcim-interfaces-delete" "dcim-interfaces-read" "dcim-interfaces-partial-update" "dcim-interfaces-update" "dcim-interfaces-graphs" "dcim-interfaces-trace" "dcim-inventory-items-list" "dcim-inventory-items-create" "dcim-inventory-items-delete" "dcim-inventory-items-read" "dcim-inventory-items-partial-update" "dcim-inventory-items-update" "dcim-manufacturers-list" "dcim-manufacturers-create" "dcim-manufacturers-delete" "dcim-manufacturers-read" "dcim-manufacturers-partial-update" "dcim-manufacturers-update" "dcim-platforms-list" "dcim-platforms-create" "dcim-platforms-delete" "dcim-platforms-read" "dcim-platforms-partial-update" "dcim-platforms-update" "dcim-power-connections-list" "dcim-power-feeds-list" "dcim-power-feeds-create" "dcim-power-feeds-delete" "dcim-power-feeds-read" "dcim-power-feeds-partial-update" "dcim-power-feeds-update" "dcim-power-outlet-templates-list" "dcim-power-outlet-templates-create" "dcim-power-outlet-templates-delete" "dcim-power-outlet-templates-read" "dcim-power-outlet-templates-partial-update" "dcim-power-outlet-templates-update" "dcim-power-outlets-list" "dcim-power-outlets-create" "dcim-power-outlets-delete" "dcim-power-outlets-read" "dcim-power-outlets-partial-update" "dcim-power-outlets-update" "dcim-power-outlets-trace" "dcim-power-panels-list" "dcim-power-panels-create" "dcim-power-panels-delete" "dcim-power-panels-read" "dcim-power-panels-partial-update" "dcim-power-panels-update" "dcim-power-port-templates-list" "dcim-power-port-templates-create" "dcim-power-port-templates-delete" "dcim-power-port-templates-read" "dcim-power-port-templates-partial-update" "dcim-power-port-templates-update" "dcim-power-ports-list" "dcim-power-ports-create" "dcim-power-ports-delete" "dcim-power-ports-read" "dcim-power-ports-partial-update" "dcim-power-ports-update" "dcim-power-ports-trace" "dcim-rack-groups-list" "dcim-rack-groups-create" "dcim-rack-groups-delete" "dcim-rack-groups-read" "dcim-rack-groups-partial-update" "dcim-rack-groups-update" "dcim-rack-reservations-list" "dcim-rack-reservations-create" "dcim-rack-reservations-delete" "dcim-rack-reservations-read" "dcim-rack-reservations-partial-update" "dcim-rack-reservations-update" "dcim-rack-roles-list" "dcim-rack-roles-create" "dcim-rack-roles-delete" "dcim-rack-roles-read" "dcim-rack-roles-partial-update" "dcim-rack-roles-update" "dcim-racks-list" "dcim-racks-create" "dcim-racks-delete" "dcim-racks-read" "dcim-racks-partial-update" "dcim-racks-update" "dcim-racks-elevation" "dcim-rear-port-templates-list" "dcim-rear-port-templates-create" "dcim-rear-port-templates-delete" "dcim-rear-port-templates-read" "dcim-rear-port-templates-partial-update" "dcim-rear-port-templates-update" "dcim-rear-ports-list" "dcim-rear-ports-create" "dcim-rear-ports-delete" "dcim-rear-ports-read" "dcim-rear-ports-partial-update" "dcim-rear-ports-update" "dcim-rear-ports-trace" "dcim-regions-list" "dcim-regions-create" "dcim-regions-delete" "dcim-regions-read" "dcim-regions-partial-update" "dcim-regions-update" "dcim-sites-list" "dcim-sites-create" "dcim-sites-delete" "dcim-sites-read" "dcim-sites-partial-update" "dcim-sites-update" "dcim-sites-graphs" "dcim-virtual-chassis-list" "dcim-virtual-chassis-create" "dcim-virtual-chassis-delete" "dcim-virtual-chassis-read" "dcim-virtual-chassis-partial-update" "dcim-virtual-chassis-update" "extras-custom-field-choices-list" "extras-custom-field-choices-read" "extras-config-contexts-list" "extras-config-contexts-create" "extras-config-contexts-delete" "extras-config-contexts-read" "extras-config-contexts-partial-update" "extras-config-contexts-update" "extras-export-templates-list" "extras-export-templates-create" "extras-export-templates-delete" "extras-export-templates-read" "extras-export-templates-partial-update" "extras-export-templates-update" "extras-graphs-list" "extras-graphs-create" "extras-graphs-delete" "extras-graphs-read" "extras-graphs-partial-update" "extras-graphs-update" "extras-image-attachments-list" "extras-image-attachments-create" "extras-image-attachments-delete" "extras-image-attachments-read" "extras-image-attachments-partial-update" "extras-image-attachments-update" "extras-object-changes-list" "extras-object-changes-read" "extras-reports-list" "extras-reports-read" "extras-reports-run" "extras-scripts-list" "extras-scripts-read" "extras-tags-list" "extras-tags-create" "extras-tags-delete" "extras-tags-read" "extras-tags-partial-update" "extras-tags-update" "ipam-aggregates-list" "ipam-aggregates-create" "ipam-aggregates-delete" "ipam-aggregates-read" "ipam-aggregates-partial-update" "ipam-aggregates-update" "ipam-ip-addresses-list" "ipam-ip-addresses-create" "ipam-ip-addresses-delete" "ipam-ip-addresses-read" "ipam-ip-addresses-partial-update" "ipam-ip-addresses-update" "ipam-prefixes-list" "ipam-prefixes-create" "ipam-prefixes-delete" "ipam-prefixes-read" "ipam-prefixes-partial-update" "ipam-prefixes-update" "ipam-prefixes-available-ips-read" "ipam-prefixes-available-ips-create" "ipam-prefixes-available-prefixes-read" "ipam-prefixes-available-prefixes-create" "ipam-rirs-list" "ipam-rirs-create" "ipam-rirs-delete" "ipam-rirs-read" "ipam-rirs-partial-update" "ipam-rirs-update" "ipam-roles-list" "ipam-roles-create" "ipam-roles-delete" "ipam-roles-read" "ipam-roles-partial-update" "ipam-roles-update" "ipam-services-list" "ipam-services-create" "ipam-services-delete" "ipam-services-read" "ipam-services-partial-update" "ipam-services-update" "ipam-vlan-groups-list" "ipam-vlan-groups-create" "ipam-vlan-groups-delete" "ipam-vlan-groups-read" "ipam-vlan-groups-partial-update" "ipam-vlan-groups-update" "ipam-vlans-list" "ipam-vlans-create" "ipam-vlans-delete" "ipam-vlans-read" "ipam-vlans-partial-update" "ipam-vlans-update" "ipam-vrfs-list" "ipam-vrfs-create" "ipam-vrfs-delete" "ipam-vrfs-read" "ipam-vrfs-partial-update" "ipam-vrfs-update" "secrets-generate-rsa-key-pair-list" "secrets-get-session-key-create" "secrets-secret-roles-list" "secrets-secret-roles-create" "secrets-secret-roles-delete" "secrets-secret-roles-read" "secrets-secret-roles-partial-update" "secrets-secret-roles-update" "secrets-secrets-list" "secrets-secrets-create" "secrets-secrets-delete" "secrets-secrets-read" "secrets-secrets-partial-update" "secrets-secrets-update" "tenancy-tenant-groups-list" "tenancy-tenant-groups-create" "tenancy-tenant-groups-delete" "tenancy-tenant-groups-read" "tenancy-tenant-groups-partial-update" "tenancy-tenant-groups-update" "tenancy-tenants-list" "tenancy-tenants-create" "tenancy-tenants-delete" "tenancy-tenants-read" "tenancy-tenants-partial-update" "tenancy-tenants-update" "virtualization-cluster-groups-list" "virtualization-cluster-groups-create" "virtualization-cluster-groups-delete" "virtualization-cluster-groups-read" "virtualization-cluster-groups-partial-update" "virtualization-cluster-groups-update" "virtualization-cluster-types-list" "virtualization-cluster-types-create" "virtualization-cluster-types-delete" "virtualization-cluster-types-read" "virtualization-cluster-types-partial-update" "virtualization-cluster-types-update" "virtualization-clusters-list" "virtualization-clusters-create" "virtualization-clusters-delete" "virtualization-clusters-read" "virtualization-clusters-partial-update" "virtualization-clusters-update" "virtualization-interfaces-list" "virtualization-interfaces-create" "virtualization-interfaces-delete" "virtualization-interfaces-read" "virtualization-interfaces-partial-update" "virtualization-interfaces-update" "virtualization-virtual-machines-list" "virtualization-virtual-machines-create" "virtualization-virtual-machines-delete" "virtualization-virtual-machines-read" "virtualization-virtual-machines-partial-update" "virtualization-virtual-machines-update" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -223,7 +247,7 @@ export def "circuits-circuit-terminations-list" [
   --site-n: string
   --limit: int # Number of results to return per page.
   --offset: int # The initial index from which to return the results.
-]: nothing -> record<count: int, next: string, previous: string, results: table<cable: record, circuit: record, connected_endpoint: record, connected_endpoint_type: string, connection_status: record, description: string, id: int, port_speed: int, pp_info: string, site: record, term_side: string, upstream_speed: int, xconnect_id: string>> {
+]: nothing -> oneof<record<count: int, next: string, previous: string, results: table<cable: record, circuit: record, connected_endpoint: record, connected_endpoint_type: string, connection_status: record, description: string, id: int, port_speed: int, pp_info: string, site: record, term_side: string, upstream_speed: int, xconnect_id: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "term_side" $term_side "scalar") (serialize-qp "port_speed" $port_speed "scalar") (serialize-qp "upstream_speed" $upstream_speed "scalar") (serialize-qp "xconnect_id" $xconnect_id "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "circuit_id" $circuit_id "scalar") (serialize-qp "site_id" $site_id "scalar") (serialize-qp "site" $site "scalar") (serialize-qp "term_side__n" $term_side_n "scalar") (serialize-qp "port_speed__n" $port_speed_n "scalar") (serialize-qp "port_speed__lte" $port_speed_lte "scalar") (serialize-qp "port_speed__lt" $port_speed_lt "scalar") (serialize-qp "port_speed__gte" $port_speed_gte "scalar") (serialize-qp "port_speed__gt" $port_speed_gt "scalar") (serialize-qp "upstream_speed__n" $upstream_speed_n "scalar") (serialize-qp "upstream_speed__lte" $upstream_speed_lte "scalar") (serialize-qp "upstream_speed__lt" $upstream_speed_lt "scalar") (serialize-qp "upstream_speed__gte" $upstream_speed_gte "scalar") (serialize-qp "upstream_speed__gt" $upstream_speed_gt "scalar") (serialize-qp "xconnect_id__n" $xconnect_id_n "scalar") (serialize-qp "xconnect_id__ic" $xconnect_id_ic "scalar") (serialize-qp "xconnect_id__nic" $xconnect_id_nic "scalar") (serialize-qp "xconnect_id__iew" $xconnect_id_iew "scalar") (serialize-qp "xconnect_id__niew" $xconnect_id_niew "scalar") (serialize-qp "xconnect_id__isw" $xconnect_id_isw "scalar") (serialize-qp "xconnect_id__nisw" $xconnect_id_nisw "scalar") (serialize-qp "xconnect_id__ie" $xconnect_id_ie "scalar") (serialize-qp "xconnect_id__nie" $xconnect_id_nie "scalar") (serialize-qp "circuit_id__n" $circuit_id_n "scalar") (serialize-qp "site_id__n" $site_id_n "scalar") (serialize-qp "site__n" $site_n "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
@@ -247,7 +271,6 @@ export def "circuits-circuit-terminations-list" [
 # POST /circuits/circuit-terminations/
 #
 # operationId: circuits_circuit-terminations_create
-# --cable shape: {label?: string}
 export def "circuits-circuit-terminations-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -268,7 +291,7 @@ export def "circuits-circuit-terminations-create" [
   term_side: string@term-side-completer
   --upstream-speed: int # Upstream speed, if different from port speed (nullable)
   --xconnect-id: string
-]: any -> record<cable: record<id: int, label: string, url: string>, circuit: record<cid: string, id: int, url: string>, connected_endpoint: record, connected_endpoint_type: string, connection_status: record<label: string, value: bool>, description: string, id: int, port_speed: int, pp_info: string, site: record<id: int, name: string, slug: string, url: string>, term_side: string, upstream_speed: int, xconnect_id: string> {
+]: any -> oneof<record<cable: record<id: int, label: string, url: string>, circuit: record<cid: string, id: int, url: string>, connected_endpoint: record, connected_endpoint_type: string, connection_status: record<label: string, value: bool>, description: string, id: int, port_speed: int, pp_info: string, site: record<id: int, name: string, slug: string, url: string>, term_side: string, upstream_speed: int, xconnect_id: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -341,7 +364,7 @@ export def "circuits-circuit-terminations-read" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<cable: record<id: int, label: string, url: string>, circuit: record<cid: string, id: int, url: string>, connected_endpoint: record, connected_endpoint_type: string, connection_status: record<label: string, value: bool>, description: string, id: int, port_speed: int, pp_info: string, site: record<id: int, name: string, slug: string, url: string>, term_side: string, upstream_speed: int, xconnect_id: string> {
+]: nothing -> oneof<record<cable: record<id: int, label: string, url: string>, circuit: record<cid: string, id: int, url: string>, connected_endpoint: record, connected_endpoint_type: string, connection_status: record<label: string, value: bool>, description: string, id: int, port_speed: int, pp_info: string, site: record<id: int, name: string, slug: string, url: string>, term_side: string, upstream_speed: int, xconnect_id: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -365,7 +388,6 @@ export def "circuits-circuit-terminations-read" [
 # PATCH /circuits/circuit-terminations/{id}/
 #
 # operationId: circuits_circuit-terminations_partial_update
-# --cable shape: {label?: string}
 export def "circuits-circuit-terminations-partial-update" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -387,7 +409,7 @@ export def "circuits-circuit-terminations-partial-update" [
   term_side: string@term-side-completer
   --upstream-speed: int # Upstream speed, if different from port speed (nullable)
   --xconnect-id: string
-]: any -> record<cable: record<id: int, label: string, url: string>, circuit: record<cid: string, id: int, url: string>, connected_endpoint: record, connected_endpoint_type: string, connection_status: record<label: string, value: bool>, description: string, id: int, port_speed: int, pp_info: string, site: record<id: int, name: string, slug: string, url: string>, term_side: string, upstream_speed: int, xconnect_id: string> {
+]: any -> oneof<record<cable: record<id: int, label: string, url: string>, circuit: record<cid: string, id: int, url: string>, connected_endpoint: record, connected_endpoint_type: string, connection_status: record<label: string, value: bool>, description: string, id: int, port_speed: int, pp_info: string, site: record<id: int, name: string, slug: string, url: string>, term_side: string, upstream_speed: int, xconnect_id: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -414,7 +436,6 @@ export def "circuits-circuit-terminations-partial-update" [
 # PUT /circuits/circuit-terminations/{id}/
 #
 # operationId: circuits_circuit-terminations_update
-# --cable shape: {label?: string}
 export def "circuits-circuit-terminations-update" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -436,7 +457,7 @@ export def "circuits-circuit-terminations-update" [
   term_side: string@term-side-completer
   --upstream-speed: int # Upstream speed, if different from port speed (nullable)
   --xconnect-id: string
-]: any -> record<cable: record<id: int, label: string, url: string>, circuit: record<cid: string, id: int, url: string>, connected_endpoint: record, connected_endpoint_type: string, connection_status: record<label: string, value: bool>, description: string, id: int, port_speed: int, pp_info: string, site: record<id: int, name: string, slug: string, url: string>, term_side: string, upstream_speed: int, xconnect_id: string> {
+]: any -> oneof<record<cable: record<id: int, label: string, url: string>, circuit: record<cid: string, id: int, url: string>, connected_endpoint: record, connected_endpoint_type: string, connection_status: record<label: string, value: bool>, description: string, id: int, port_speed: int, pp_info: string, site: record<id: int, name: string, slug: string, url: string>, term_side: string, upstream_speed: int, xconnect_id: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -503,7 +524,7 @@ export def "circuits-circuit-types-list" [
   --slug-nie: string
   --limit: int # Number of results to return per page.
   --offset: int # The initial index from which to return the results.
-]: nothing -> record<count: int, next: string, previous: string, results: table<circuit_count: int, description: string, id: int, name: string, slug: string>> {
+]: nothing -> oneof<record<count: int, next: string, previous: string, results: table<circuit_count: int, description: string, id: int, name: string, slug: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "slug" $slug "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "id__n" $id_n "scalar") (serialize-qp "id__lte" $id_lte "scalar") (serialize-qp "id__lt" $id_lt "scalar") (serialize-qp "id__gte" $id_gte "scalar") (serialize-qp "id__gt" $id_gt "scalar") (serialize-qp "name__n" $name_n "scalar") (serialize-qp "name__ic" $name_ic "scalar") (serialize-qp "name__nic" $name_nic "scalar") (serialize-qp "name__iew" $name_iew "scalar") (serialize-qp "name__niew" $name_niew "scalar") (serialize-qp "name__isw" $name_isw "scalar") (serialize-qp "name__nisw" $name_nisw "scalar") (serialize-qp "name__ie" $name_ie "scalar") (serialize-qp "name__nie" $name_nie "scalar") (serialize-qp "slug__n" $slug_n "scalar") (serialize-qp "slug__ic" $slug_ic "scalar") (serialize-qp "slug__nic" $slug_nic "scalar") (serialize-qp "slug__iew" $slug_iew "scalar") (serialize-qp "slug__niew" $slug_niew "scalar") (serialize-qp "slug__isw" $slug_isw "scalar") (serialize-qp "slug__nisw" $slug_nisw "scalar") (serialize-qp "slug__ie" $slug_ie "scalar") (serialize-qp "slug__nie" $slug_nie "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
@@ -540,7 +561,7 @@ export def "circuits-circuit-types-create" [
   --description: string
   name: string
   slug: string # format: slug
-]: any -> record<circuit_count: int, description: string, id: int, name: string, slug: string> {
+]: any -> oneof<record<circuit_count: int, description: string, id: int, name: string, slug: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -613,7 +634,7 @@ export def "circuits-circuit-types-read" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<circuit_count: int, description: string, id: int, name: string, slug: string> {
+]: nothing -> oneof<record<circuit_count: int, description: string, id: int, name: string, slug: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -651,7 +672,7 @@ export def "circuits-circuit-types-partial-update" [
   --description: string
   name: string
   slug: string # format: slug
-]: any -> record<circuit_count: int, description: string, id: int, name: string, slug: string> {
+]: any -> oneof<record<circuit_count: int, description: string, id: int, name: string, slug: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -692,7 +713,7 @@ export def "circuits-circuit-types-update" [
   --description: string
   name: string
   slug: string # format: slug
-]: any -> record<circuit_count: int, description: string, id: int, name: string, slug: string> {
+]: any -> oneof<record<circuit_count: int, description: string, id: int, name: string, slug: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -795,7 +816,7 @@ export def "circuits-circuits-list" [
   --tag-n: string
   --limit: int # Number of results to return per page.
   --offset: int # The initial index from which to return the results.
-]: nothing -> record<count: int, next: string, previous: string, results: table<cid: string, comments: string, commit_rate: int, created: string, custom_fields: record, description: string, id: int, install_date: string, last_updated: string, provider: record, status: record, tags: list, tenant: record, termination_a: record, termination_z: record, type: record>> {
+]: nothing -> oneof<record<count: int, next: string, previous: string, results: table<cid: string, comments: string, commit_rate: int, created: string, custom_fields: record, description: string, id: int, install_date: string, last_updated: string, provider: record, status: record, tags: list, tenant: record, termination_a: record, termination_z: record, type: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "cid" $cid "scalar") (serialize-qp "install_date" $install_date "scalar") (serialize-qp "commit_rate" $commit_rate "scalar") (serialize-qp "tenant_group_id" $tenant_group_id "scalar") (serialize-qp "tenant_group" $tenant_group "scalar") (serialize-qp "tenant_id" $tenant_id "scalar") (serialize-qp "tenant" $tenant "scalar") (serialize-qp "created" $created "scalar") (serialize-qp "created__gte" $created_gte "scalar") (serialize-qp "created__lte" $created_lte "scalar") (serialize-qp "last_updated" $last_updated "scalar") (serialize-qp "last_updated__gte" $last_updated_gte "scalar") (serialize-qp "last_updated__lte" $last_updated_lte "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "provider_id" $provider_id "scalar") (serialize-qp "provider" $provider "scalar") (serialize-qp "type_id" $type_id "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "site_id" $site_id "scalar") (serialize-qp "site" $site "scalar") (serialize-qp "region_id" $region_id "scalar") (serialize-qp "region" $region "scalar") (serialize-qp "tag" $tag "scalar") (serialize-qp "id__n" $id_n "scalar") (serialize-qp "id__lte" $id_lte "scalar") (serialize-qp "id__lt" $id_lt "scalar") (serialize-qp "id__gte" $id_gte "scalar") (serialize-qp "id__gt" $id_gt "scalar") (serialize-qp "cid__n" $cid_n "scalar") (serialize-qp "cid__ic" $cid_ic "scalar") (serialize-qp "cid__nic" $cid_nic "scalar") (serialize-qp "cid__iew" $cid_iew "scalar") (serialize-qp "cid__niew" $cid_niew "scalar") (serialize-qp "cid__isw" $cid_isw "scalar") (serialize-qp "cid__nisw" $cid_nisw "scalar") (serialize-qp "cid__ie" $cid_ie "scalar") (serialize-qp "cid__nie" $cid_nie "scalar") (serialize-qp "install_date__n" $install_date_n "scalar") (serialize-qp "install_date__lte" $install_date_lte "scalar") (serialize-qp "install_date__lt" $install_date_lt "scalar") (serialize-qp "install_date__gte" $install_date_gte "scalar") (serialize-qp "install_date__gt" $install_date_gt "scalar") (serialize-qp "commit_rate__n" $commit_rate_n "scalar") (serialize-qp "commit_rate__lte" $commit_rate_lte "scalar") (serialize-qp "commit_rate__lt" $commit_rate_lt "scalar") (serialize-qp "commit_rate__gte" $commit_rate_gte "scalar") (serialize-qp "commit_rate__gt" $commit_rate_gt "scalar") (serialize-qp "tenant_group_id__n" $tenant_group_id_n "scalar") (serialize-qp "tenant_group__n" $tenant_group_n "scalar") (serialize-qp "tenant_id__n" $tenant_id_n "scalar") (serialize-qp "tenant__n" $tenant_n "scalar") (serialize-qp "provider_id__n" $provider_id_n "scalar") (serialize-qp "provider__n" $provider_n "scalar") (serialize-qp "type_id__n" $type_id_n "scalar") (serialize-qp "type__n" $type_n "scalar") (serialize-qp "status__n" $status_n "scalar") (serialize-qp "site_id__n" $site_id_n "scalar") (serialize-qp "site__n" $site_n "scalar") (serialize-qp "region_id__n" $region_id_n "scalar") (serialize-qp "region__n" $region_n "scalar") (serialize-qp "tag__n" $tag_n "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
@@ -840,7 +861,7 @@ export def "circuits-circuits-create" [
   --tags: list<string>
   --tenant: int # nullable
   type: int
-]: any -> record<cid: string, comments: string, commit_rate: int, created: string, custom_fields: record, description: string, id: int, install_date: string, last_updated: string, provider: record<circuit_count: int, id: int, name: string, slug: string, url: string>, status: record<label: string, value: string>, tags: list<string>, tenant: record<id: int, name: string, slug: string, url: string>, termination_a: record<connected_endpoint: record<cable: int, connection_status: record, device: record, id: int, name: string, url: string>, id: int, port_speed: int, site: record<id: int, name: string, slug: string, url: string>, upstream_speed: int, url: string, xconnect_id: string>, termination_z: record<connected_endpoint: record<cable: int, connection_status: record, device: record, id: int, name: string, url: string>, id: int, port_speed: int, site: record<id: int, name: string, slug: string, url: string>, upstream_speed: int, url: string, xconnect_id: string>, type: record<circuit_count: int, id: int, name: string, slug: string, url: string>> {
+]: any -> oneof<record<cid: string, comments: string, commit_rate: int, created: string, custom_fields: record, description: string, id: int, install_date: string, last_updated: string, provider: record<circuit_count: int, id: int, name: string, slug: string, url: string>, status: record<label: string, value: string>, tags: list<string>, tenant: record<id: int, name: string, slug: string, url: string>, termination_a: record<connected_endpoint: record<cable: int, connection_status: record, device: record, id: int, name: string, url: string>, id: int, port_speed: int, site: record<id: int, name: string, slug: string, url: string>, upstream_speed: int, url: string, xconnect_id: string>, termination_z: record<connected_endpoint: record<cable: int, connection_status: record, device: record, id: int, name: string, url: string>, id: int, port_speed: int, site: record<id: int, name: string, slug: string, url: string>, upstream_speed: int, url: string, xconnect_id: string>, type: record<circuit_count: int, id: int, name: string, slug: string, url: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -913,7 +934,7 @@ export def "circuits-circuits-read" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<cid: string, comments: string, commit_rate: int, created: string, custom_fields: record, description: string, id: int, install_date: string, last_updated: string, provider: record<circuit_count: int, id: int, name: string, slug: string, url: string>, status: record<label: string, value: string>, tags: list<string>, tenant: record<id: int, name: string, slug: string, url: string>, termination_a: record<connected_endpoint: record<cable: int, connection_status: record, device: record, id: int, name: string, url: string>, id: int, port_speed: int, site: record<id: int, name: string, slug: string, url: string>, upstream_speed: int, url: string, xconnect_id: string>, termination_z: record<connected_endpoint: record<cable: int, connection_status: record, device: record, id: int, name: string, url: string>, id: int, port_speed: int, site: record<id: int, name: string, slug: string, url: string>, upstream_speed: int, url: string, xconnect_id: string>, type: record<circuit_count: int, id: int, name: string, slug: string, url: string>> {
+]: nothing -> oneof<record<cid: string, comments: string, commit_rate: int, created: string, custom_fields: record, description: string, id: int, install_date: string, last_updated: string, provider: record<circuit_count: int, id: int, name: string, slug: string, url: string>, status: record<label: string, value: string>, tags: list<string>, tenant: record<id: int, name: string, slug: string, url: string>, termination_a: record<connected_endpoint: record<cable: int, connection_status: record, device: record, id: int, name: string, url: string>, id: int, port_speed: int, site: record<id: int, name: string, slug: string, url: string>, upstream_speed: int, url: string, xconnect_id: string>, termination_z: record<connected_endpoint: record<cable: int, connection_status: record, device: record, id: int, name: string, url: string>, id: int, port_speed: int, site: record<id: int, name: string, slug: string, url: string>, upstream_speed: int, url: string, xconnect_id: string>, type: record<circuit_count: int, id: int, name: string, slug: string, url: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -959,7 +980,7 @@ export def "circuits-circuits-partial-update" [
   --tags: list<string>
   --tenant: int # nullable
   type: int
-]: any -> record<cid: string, comments: string, commit_rate: int, created: string, custom_fields: record, description: string, id: int, install_date: string, last_updated: string, provider: record<circuit_count: int, id: int, name: string, slug: string, url: string>, status: record<label: string, value: string>, tags: list<string>, tenant: record<id: int, name: string, slug: string, url: string>, termination_a: record<connected_endpoint: record<cable: int, connection_status: record, device: record, id: int, name: string, url: string>, id: int, port_speed: int, site: record<id: int, name: string, slug: string, url: string>, upstream_speed: int, url: string, xconnect_id: string>, termination_z: record<connected_endpoint: record<cable: int, connection_status: record, device: record, id: int, name: string, url: string>, id: int, port_speed: int, site: record<id: int, name: string, slug: string, url: string>, upstream_speed: int, url: string, xconnect_id: string>, type: record<circuit_count: int, id: int, name: string, slug: string, url: string>> {
+]: any -> oneof<record<cid: string, comments: string, commit_rate: int, created: string, custom_fields: record, description: string, id: int, install_date: string, last_updated: string, provider: record<circuit_count: int, id: int, name: string, slug: string, url: string>, status: record<label: string, value: string>, tags: list<string>, tenant: record<id: int, name: string, slug: string, url: string>, termination_a: record<connected_endpoint: record<cable: int, connection_status: record, device: record, id: int, name: string, url: string>, id: int, port_speed: int, site: record<id: int, name: string, slug: string, url: string>, upstream_speed: int, url: string, xconnect_id: string>, termination_z: record<connected_endpoint: record<cable: int, connection_status: record, device: record, id: int, name: string, url: string>, id: int, port_speed: int, site: record<id: int, name: string, slug: string, url: string>, upstream_speed: int, url: string, xconnect_id: string>, type: record<circuit_count: int, id: int, name: string, slug: string, url: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1008,7 +1029,7 @@ export def "circuits-circuits-update" [
   --tags: list<string>
   --tenant: int # nullable
   type: int
-]: any -> record<cid: string, comments: string, commit_rate: int, created: string, custom_fields: record, description: string, id: int, install_date: string, last_updated: string, provider: record<circuit_count: int, id: int, name: string, slug: string, url: string>, status: record<label: string, value: string>, tags: list<string>, tenant: record<id: int, name: string, slug: string, url: string>, termination_a: record<connected_endpoint: record<cable: int, connection_status: record, device: record, id: int, name: string, url: string>, id: int, port_speed: int, site: record<id: int, name: string, slug: string, url: string>, upstream_speed: int, url: string, xconnect_id: string>, termination_z: record<connected_endpoint: record<cable: int, connection_status: record, device: record, id: int, name: string, url: string>, id: int, port_speed: int, site: record<id: int, name: string, slug: string, url: string>, upstream_speed: int, url: string, xconnect_id: string>, type: record<circuit_count: int, id: int, name: string, slug: string, url: string>> {
+]: any -> oneof<record<cid: string, comments: string, commit_rate: int, created: string, custom_fields: record, description: string, id: int, install_date: string, last_updated: string, provider: record<circuit_count: int, id: int, name: string, slug: string, url: string>, status: record<label: string, value: string>, tags: list<string>, tenant: record<id: int, name: string, slug: string, url: string>, termination_a: record<connected_endpoint: record<cable: int, connection_status: record, device: record, id: int, name: string, url: string>, id: int, port_speed: int, site: record<id: int, name: string, slug: string, url: string>, upstream_speed: int, url: string, xconnect_id: string>, termination_z: record<connected_endpoint: record<cable: int, connection_status: record, device: record, id: int, name: string, url: string>, id: int, port_speed: int, site: record<id: int, name: string, slug: string, url: string>, upstream_speed: int, url: string, xconnect_id: string>, type: record<circuit_count: int, id: int, name: string, slug: string, url: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1107,7 +1128,7 @@ export def "circuits-providers-list" [
   --tag-n: string
   --limit: int # Number of results to return per page.
   --offset: int # The initial index from which to return the results.
-]: nothing -> record<count: int, next: string, previous: string, results: table<account: string, admin_contact: string, asn: int, circuit_count: int, comments: string, created: string, custom_fields: record, id: int, last_updated: string, name: string, noc_contact: string, portal_url: string, slug: string, tags: list>> {
+]: nothing -> oneof<record<count: int, next: string, previous: string, results: table<account: string, admin_contact: string, asn: int, circuit_count: int, comments: string, created: string, custom_fields: record, id: int, last_updated: string, name: string, noc_contact: string, portal_url: string, slug: string, tags: list>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "slug" $slug "scalar") (serialize-qp "asn" $asn "scalar") (serialize-qp "account" $account "scalar") (serialize-qp "created" $created "scalar") (serialize-qp "created__gte" $created_gte "scalar") (serialize-qp "created__lte" $created_lte "scalar") (serialize-qp "last_updated" $last_updated "scalar") (serialize-qp "last_updated__gte" $last_updated_gte "scalar") (serialize-qp "last_updated__lte" $last_updated_lte "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "region_id" $region_id "scalar") (serialize-qp "region" $region "scalar") (serialize-qp "site_id" $site_id "scalar") (serialize-qp "site" $site "scalar") (serialize-qp "tag" $tag "scalar") (serialize-qp "id__n" $id_n "scalar") (serialize-qp "id__lte" $id_lte "scalar") (serialize-qp "id__lt" $id_lt "scalar") (serialize-qp "id__gte" $id_gte "scalar") (serialize-qp "id__gt" $id_gt "scalar") (serialize-qp "name__n" $name_n "scalar") (serialize-qp "name__ic" $name_ic "scalar") (serialize-qp "name__nic" $name_nic "scalar") (serialize-qp "name__iew" $name_iew "scalar") (serialize-qp "name__niew" $name_niew "scalar") (serialize-qp "name__isw" $name_isw "scalar") (serialize-qp "name__nisw" $name_nisw "scalar") (serialize-qp "name__ie" $name_ie "scalar") (serialize-qp "name__nie" $name_nie "scalar") (serialize-qp "slug__n" $slug_n "scalar") (serialize-qp "slug__ic" $slug_ic "scalar") (serialize-qp "slug__nic" $slug_nic "scalar") (serialize-qp "slug__iew" $slug_iew "scalar") (serialize-qp "slug__niew" $slug_niew "scalar") (serialize-qp "slug__isw" $slug_isw "scalar") (serialize-qp "slug__nisw" $slug_nisw "scalar") (serialize-qp "slug__ie" $slug_ie "scalar") (serialize-qp "slug__nie" $slug_nie "scalar") (serialize-qp "asn__n" $asn_n "scalar") (serialize-qp "asn__lte" $asn_lte "scalar") (serialize-qp "asn__lt" $asn_lt "scalar") (serialize-qp "asn__gte" $asn_gte "scalar") (serialize-qp "asn__gt" $asn_gt "scalar") (serialize-qp "account__n" $account_n "scalar") (serialize-qp "account__ic" $account_ic "scalar") (serialize-qp "account__nic" $account_nic "scalar") (serialize-qp "account__iew" $account_iew "scalar") (serialize-qp "account__niew" $account_niew "scalar") (serialize-qp "account__isw" $account_isw "scalar") (serialize-qp "account__nisw" $account_nisw "scalar") (serialize-qp "account__ie" $account_ie "scalar") (serialize-qp "account__nie" $account_nie "scalar") (serialize-qp "region_id__n" $region_id_n "scalar") (serialize-qp "region__n" $region_n "scalar") (serialize-qp "site_id__n" $site_id_n "scalar") (serialize-qp "site__n" $site_n "scalar") (serialize-qp "tag__n" $tag_n "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
@@ -1151,7 +1172,7 @@ export def "circuits-providers-create" [
   --portal-url: string # format: uri
   slug: string # format: slug
   --tags: list<string>
-]: any -> record<account: string, admin_contact: string, asn: int, circuit_count: int, comments: string, created: string, custom_fields: record, id: int, last_updated: string, name: string, noc_contact: string, portal_url: string, slug: string, tags: list<string>> {
+]: any -> oneof<record<account: string, admin_contact: string, asn: int, circuit_count: int, comments: string, created: string, custom_fields: record, id: int, last_updated: string, name: string, noc_contact: string, portal_url: string, slug: string, tags: list<string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1224,7 +1245,7 @@ export def "circuits-providers-read" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<account: string, admin_contact: string, asn: int, circuit_count: int, comments: string, created: string, custom_fields: record, id: int, last_updated: string, name: string, noc_contact: string, portal_url: string, slug: string, tags: list<string>> {
+]: nothing -> oneof<record<account: string, admin_contact: string, asn: int, circuit_count: int, comments: string, created: string, custom_fields: record, id: int, last_updated: string, name: string, noc_contact: string, portal_url: string, slug: string, tags: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1269,7 +1290,7 @@ export def "circuits-providers-partial-update" [
   --portal-url: string # format: uri
   slug: string # format: slug
   --tags: list<string>
-]: any -> record<account: string, admin_contact: string, asn: int, circuit_count: int, comments: string, created: string, custom_fields: record, id: int, last_updated: string, name: string, noc_contact: string, portal_url: string, slug: string, tags: list<string>> {
+]: any -> oneof<record<account: string, admin_contact: string, asn: int, circuit_count: int, comments: string, created: string, custom_fields: record, id: int, last_updated: string, name: string, noc_contact: string, portal_url: string, slug: string, tags: list<string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1317,7 +1338,7 @@ export def "circuits-providers-update" [
   --portal-url: string # format: uri
   slug: string # format: slug
   --tags: list<string>
-]: any -> record<account: string, admin_contact: string, asn: int, circuit_count: int, comments: string, created: string, custom_fields: record, id: int, last_updated: string, name: string, noc_contact: string, portal_url: string, slug: string, tags: list<string>> {
+]: any -> oneof<record<account: string, admin_contact: string, asn: int, circuit_count: int, comments: string, created: string, custom_fields: record, id: int, last_updated: string, name: string, noc_contact: string, portal_url: string, slug: string, tags: list<string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1356,7 +1377,7 @@ export def "circuits-providers-graphs" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<account: string, admin_contact: string, asn: int, circuit_count: int, comments: string, created: string, custom_fields: record, id: int, last_updated: string, name: string, noc_contact: string, portal_url: string, slug: string, tags: list<string>> {
+]: nothing -> oneof<record<account: string, admin_contact: string, asn: int, circuit_count: int, comments: string, created: string, custom_fields: record, id: int, last_updated: string, name: string, noc_contact: string, portal_url: string, slug: string, tags: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1432,7 +1453,7 @@ export def "dcim-cables-list" [
   --color-n: string
   --limit: int # Number of results to return per page.
   --offset: int # The initial index from which to return the results.
-]: nothing -> record<count: int, next: string, previous: string, results: table<color: string, id: int, label: string, length: int, length_unit: record, status: record, termination_a: record, termination_a_id: int, termination_a_type: string, termination_b: record, termination_b_id: int, termination_b_type: string, type: string>> {
+]: nothing -> oneof<record<count: int, next: string, previous: string, results: table<color: string, id: int, label: string, length: int, length_unit: record, status: record, termination_a: record, termination_a_id: int, termination_a_type: string, termination_b: record, termination_b_id: int, termination_b_type: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "label" $label "scalar") (serialize-qp "length" $length "scalar") (serialize-qp "length_unit" $length_unit "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "color" $color "scalar") (serialize-qp "device_id" $device_id "scalar") (serialize-qp "device" $device "scalar") (serialize-qp "rack_id" $rack_id "scalar") (serialize-qp "rack" $rack "scalar") (serialize-qp "site_id" $site_id "scalar") (serialize-qp "site" $site "scalar") (serialize-qp "tenant_id" $tenant_id "scalar") (serialize-qp "tenant" $tenant "scalar") (serialize-qp "id__n" $id_n "scalar") (serialize-qp "id__lte" $id_lte "scalar") (serialize-qp "id__lt" $id_lt "scalar") (serialize-qp "id__gte" $id_gte "scalar") (serialize-qp "id__gt" $id_gt "scalar") (serialize-qp "label__n" $label_n "scalar") (serialize-qp "label__ic" $label_ic "scalar") (serialize-qp "label__nic" $label_nic "scalar") (serialize-qp "label__iew" $label_iew "scalar") (serialize-qp "label__niew" $label_niew "scalar") (serialize-qp "label__isw" $label_isw "scalar") (serialize-qp "label__nisw" $label_nisw "scalar") (serialize-qp "label__ie" $label_ie "scalar") (serialize-qp "label__nie" $label_nie "scalar") (serialize-qp "length__n" $length_n "scalar") (serialize-qp "length__lte" $length_lte "scalar") (serialize-qp "length__lt" $length_lt "scalar") (serialize-qp "length__gte" $length_gte "scalar") (serialize-qp "length__gt" $length_gt "scalar") (serialize-qp "length_unit__n" $length_unit_n "scalar") (serialize-qp "type__n" $type_n "scalar") (serialize-qp "status__n" $status_n "scalar") (serialize-qp "color__n" $color_n "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
@@ -1476,7 +1497,7 @@ export def "dcim-cables-create" [
   termination_b_id: int
   termination_b_type: string
   --type: string@type-completer
-]: any -> record<color: string, id: int, label: string, length: int, length_unit: record<label: string, value: string>, status: record<label: string, value: string>, termination_a: record, termination_a_id: int, termination_a_type: string, termination_b: record, termination_b_id: int, termination_b_type: string, type: string> {
+]: any -> oneof<record<color: string, id: int, label: string, length: int, length_unit: record<label: string, value: string>, status: record<label: string, value: string>, termination_a: record, termination_a_id: int, termination_a_type: string, termination_b: record, termination_b_id: int, termination_b_type: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1549,7 +1570,7 @@ export def "dcim-cables-read" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<color: string, id: int, label: string, length: int, length_unit: record<label: string, value: string>, status: record<label: string, value: string>, termination_a: record, termination_a_id: int, termination_a_type: string, termination_b: record, termination_b_id: int, termination_b_type: string, type: string> {
+]: nothing -> oneof<record<color: string, id: int, label: string, length: int, length_unit: record<label: string, value: string>, status: record<label: string, value: string>, termination_a: record, termination_a_id: int, termination_a_type: string, termination_b: record, termination_b_id: int, termination_b_type: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1594,7 +1615,7 @@ export def "dcim-cables-partial-update" [
   termination_b_id: int
   termination_b_type: string
   --type: string@type-completer
-]: any -> record<color: string, id: int, label: string, length: int, length_unit: record<label: string, value: string>, status: record<label: string, value: string>, termination_a: record, termination_a_id: int, termination_a_type: string, termination_b: record, termination_b_id: int, termination_b_type: string, type: string> {
+]: any -> oneof<record<color: string, id: int, label: string, length: int, length_unit: record<label: string, value: string>, status: record<label: string, value: string>, termination_a: record, termination_a_id: int, termination_a_type: string, termination_b: record, termination_b_id: int, termination_b_type: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1642,7 +1663,7 @@ export def "dcim-cables-update" [
   termination_b_id: int
   termination_b_type: string
   --type: string@type-completer
-]: any -> record<color: string, id: int, label: string, length: int, length_unit: record<label: string, value: string>, status: record<label: string, value: string>, termination_a: record, termination_a_id: int, termination_a_type: string, termination_b: record, termination_b_id: int, termination_b_type: string, type: string> {
+]: any -> oneof<record<color: string, id: int, label: string, length: int, length_unit: record<label: string, value: string>, status: record<label: string, value: string>, termination_a: record, termination_a_id: int, termination_a_type: string, termination_b: record, termination_b_id: int, termination_b_type: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1680,11 +1701,13 @@ export def "dcim-connected-device-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --peer-device: string # The name of the peer device
-  --peer-interface: string # The name of the peer interface
-]: nothing -> record<asset_tag: string, cluster: record<id: int, name: string, url: string, virtualmachine_count: int>, comments: string, created: string, custom_fields: record, device_role: record<device_count: int, id: int, name: string, slug: string, url: string, virtualmachine_count: int>, device_type: record<device_count: int, display_name: string, id: int, manufacturer: record<devicetype_count: int, id: int, name: string, slug: string, url: string>, model: string, slug: string, url: string>, display_name: string, face: record<label: string, value: string>, id: int, last_updated: string, local_context_data: string, name: string, parent_device: record<display_name: string, id: int, name: string, url: string>, platform: record<device_count: int, id: int, name: string, slug: string, url: string, virtualmachine_count: int>, position: int, primary_ip: record<address: string, family: string, id: int, url: string>, primary_ip4: record<address: string, family: string, id: int, url: string>, primary_ip6: record<address: string, family: string, id: int, url: string>, rack: record<device_count: int, display_name: string, id: int, name: string, url: string>, serial: string, site: record<id: int, name: string, slug: string, url: string>, status: record<label: string, value: string>, tags: list<string>, tenant: record<id: int, name: string, slug: string, url: string>, vc_position: int, vc_priority: int, virtual_chassis: record<id: int, master: record<display_name: string, id: int, name: string, url: string>, member_count: int, url: string>> {
+  --peer-device: string # The name of the peer device (required)
+  --peer-interface: string # The name of the peer interface (required)
+]: nothing -> oneof<record<asset_tag: string, cluster: record<id: int, name: string, url: string, virtualmachine_count: int>, comments: string, created: string, custom_fields: record, device_role: record<device_count: int, id: int, name: string, slug: string, url: string, virtualmachine_count: int>, device_type: record<device_count: int, display_name: string, id: int, manufacturer: record<devicetype_count: int, id: int, name: string, slug: string, url: string>, model: string, slug: string, url: string>, display_name: string, face: record<label: string, value: string>, id: int, last_updated: string, local_context_data: string, name: string, parent_device: record<display_name: string, id: int, name: string, url: string>, platform: record<device_count: int, id: int, name: string, slug: string, url: string, virtualmachine_count: int>, position: int, primary_ip: record<address: string, family: string, id: int, url: string>, primary_ip4: record<address: string, family: string, id: int, url: string>, primary_ip6: record<address: string, family: string, id: int, url: string>, rack: record<device_count: int, display_name: string, id: int, name: string, url: string>, serial: string, site: record<id: int, name: string, slug: string, url: string>, status: record<label: string, value: string>, tags: list<string>, tenant: record<id: int, name: string, slug: string, url: string>, vc_position: int, vc_priority: int, virtual_chassis: record<id: int, master: record<display_name: string, id: int, name: string, url: string>, member_count: int, url: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($peer_device == null) { error make --unspanned { msg: "required query parameter 'peer_device' missing: pass --peer-device" } }
+  if ($peer_interface == null) { error make --unspanned { msg: "required query parameter 'peer_interface' missing: pass --peer-interface" } }
   let qp = [(serialize-qp "peer_device" $peer_device "scalar") (serialize-qp "peer_interface" $peer_interface "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/dcim/connected-device/" $qp $auth.query)
   let accept_val = "application/json"
@@ -1733,7 +1756,7 @@ export def "dcim-console-connections-list" [
   --connection-status-n: string
   --limit: int # Number of results to return per page.
   --offset: int # The initial index from which to return the results.
-]: nothing -> record<count: int, next: string, previous: string, results: table<cable: record, connected_endpoint: record, connected_endpoint_type: string, connection_status: record, description: string, device: record, id: int, name: string, tags: list, type: record>> {
+]: nothing -> oneof<record<count: int, next: string, previous: string, results: table<cable: record, connected_endpoint: record, connected_endpoint_type: string, connection_status: record, description: string, device: record, id: int, name: string, tags: list, type: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "connection_status" $connection_status "scalar") (serialize-qp "site" $site "scalar") (serialize-qp "device_id" $device_id "scalar") (serialize-qp "device" $device "scalar") (serialize-qp "name__n" $name_n "scalar") (serialize-qp "name__ic" $name_ic "scalar") (serialize-qp "name__nic" $name_nic "scalar") (serialize-qp "name__iew" $name_iew "scalar") (serialize-qp "name__niew" $name_niew "scalar") (serialize-qp "name__isw" $name_isw "scalar") (serialize-qp "name__nisw" $name_nisw "scalar") (serialize-qp "name__ie" $name_ie "scalar") (serialize-qp "name__nie" $name_nie "scalar") (serialize-qp "connection_status__n" $connection_status_n "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
@@ -1791,7 +1814,7 @@ export def "dcim-console-port-templates-list" [
   --devicetype-id-n: string
   --limit: int # Number of results to return per page.
   --offset: int # The initial index from which to return the results.
-]: nothing -> record<count: int, next: string, previous: string, results: table<device_type: record, id: int, name: string, type: record>> {
+]: nothing -> oneof<record<count: int, next: string, previous: string, results: table<device_type: record, id: int, name: string, type: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "devicetype_id" $devicetype_id "scalar") (serialize-qp "id__n" $id_n "scalar") (serialize-qp "id__lte" $id_lte "scalar") (serialize-qp "id__lt" $id_lt "scalar") (serialize-qp "id__gte" $id_gte "scalar") (serialize-qp "id__gt" $id_gt "scalar") (serialize-qp "name__n" $name_n "scalar") (serialize-qp "name__ic" $name_ic "scalar") (serialize-qp "name__nic" $name_nic "scalar") (serialize-qp "name__iew" $name_iew "scalar") (serialize-qp "name__niew" $name_niew "scalar") (serialize-qp "name__isw" $name_isw "scalar") (serialize-qp "name__nisw" $name_nisw "scalar") (serialize-qp "name__ie" $name_ie "scalar") (serialize-qp "name__nie" $name_nie "scalar") (serialize-qp "type__n" $type_n "scalar") (serialize-qp "devicetype_id__n" $devicetype_id_n "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
@@ -1828,7 +1851,7 @@ export def "dcim-console-port-templates-create" [
   device_type: int
   name: string
   --type: string@type-completer-1
-]: any -> record<device_type: record<device_count: int, display_name: string, id: int, manufacturer: record<devicetype_count: int, id: int, name: string, slug: string, url: string>, model: string, slug: string, url: string>, id: int, name: string, type: record<label: string, value: string>> {
+]: any -> oneof<record<device_type: record<device_count: int, display_name: string, id: int, manufacturer: record<devicetype_count: int, id: int, name: string, slug: string, url: string>, model: string, slug: string, url: string>, id: int, name: string, type: record<label: string, value: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1901,7 +1924,7 @@ export def "dcim-console-port-templates-read" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<device_type: record<device_count: int, display_name: string, id: int, manufacturer: record<devicetype_count: int, id: int, name: string, slug: string, url: string>, model: string, slug: string, url: string>, id: int, name: string, type: record<label: string, value: string>> {
+]: nothing -> oneof<record<device_type: record<device_count: int, display_name: string, id: int, manufacturer: record<devicetype_count: int, id: int, name: string, slug: string, url: string>, model: string, slug: string, url: string>, id: int, name: string, type: record<label: string, value: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1939,7 +1962,7 @@ export def "dcim-console-port-templates-partial-update" [
   device_type: int
   name: string
   --type: string@type-completer-1
-]: any -> record<device_type: record<device_count: int, display_name: string, id: int, manufacturer: record<devicetype_count: int, id: int, name: string, slug: string, url: string>, model: string, slug: string, url: string>, id: int, name: string, type: record<label: string, value: string>> {
+]: any -> oneof<record<device_type: record<device_count: int, display_name: string, id: int, manufacturer: record<devicetype_count: int, id: int, name: string, slug: string, url: string>, model: string, slug: string, url: string>, id: int, name: string, type: record<label: string, value: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1980,7 +2003,7 @@ export def "dcim-console-port-templates-update" [
   device_type: int
   name: string
   --type: string@type-completer-1
-]: any -> record<device_type: record<device_count: int, display_name: string, id: int, manufacturer: record<devicetype_count: int, id: int, name: string, slug: string, url: string>, model: string, slug: string, url: string>, id: int, name: string, type: record<label: string, value: string>> {
+]: any -> oneof<record<device_type: record<device_count: int, display_name: string, id: int, manufacturer: record<devicetype_count: int, id: int, name: string, slug: string, url: string>, model: string, slug: string, url: string>, id: int, name: string, type: record<label: string, value: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2066,7 +2089,7 @@ export def "dcim-console-ports-list" [
   --type-n: string
   --limit: int # Number of results to return per page.
   --offset: int # The initial index from which to return the results.
-]: nothing -> record<count: int, next: string, previous: string, results: table<cable: record, connected_endpoint: record, connected_endpoint_type: string, connection_status: record, description: string, device: record, id: int, name: string, tags: list, type: record>> {
+]: nothing -> oneof<record<count: int, next: string, previous: string, results: table<cable: record, connected_endpoint: record, connected_endpoint_type: string, connection_status: record, description: string, device: record, id: int, name: string, tags: list, type: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "connection_status" $connection_status "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "region_id" $region_id "scalar") (serialize-qp "region" $region "scalar") (serialize-qp "site_id" $site_id "scalar") (serialize-qp "site" $site "scalar") (serialize-qp "device_id" $device_id "scalar") (serialize-qp "device" $device "scalar") (serialize-qp "tag" $tag "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "cabled" $cabled "scalar") (serialize-qp "id__n" $id_n "scalar") (serialize-qp "id__lte" $id_lte "scalar") (serialize-qp "id__lt" $id_lt "scalar") (serialize-qp "id__gte" $id_gte "scalar") (serialize-qp "id__gt" $id_gt "scalar") (serialize-qp "name__n" $name_n "scalar") (serialize-qp "name__ic" $name_ic "scalar") (serialize-qp "name__nic" $name_nic "scalar") (serialize-qp "name__iew" $name_iew "scalar") (serialize-qp "name__niew" $name_niew "scalar") (serialize-qp "name__isw" $name_isw "scalar") (serialize-qp "name__nisw" $name_nisw "scalar") (serialize-qp "name__ie" $name_ie "scalar") (serialize-qp "name__nie" $name_nie "scalar") (serialize-qp "description__n" $description_n "scalar") (serialize-qp "description__ic" $description_ic "scalar") (serialize-qp "description__nic" $description_nic "scalar") (serialize-qp "description__iew" $description_iew "scalar") (serialize-qp "description__niew" $description_niew "scalar") (serialize-qp "description__isw" $description_isw "scalar") (serialize-qp "description__nisw" $description_nisw "scalar") (serialize-qp "description__ie" $description_ie "scalar") (serialize-qp "description__nie" $description_nie "scalar") (serialize-qp "connection_status__n" $connection_status_n "scalar") (serialize-qp "region_id__n" $region_id_n "scalar") (serialize-qp "region__n" $region_n "scalar") (serialize-qp "site_id__n" $site_id_n "scalar") (serialize-qp "site__n" $site_n "scalar") (serialize-qp "device_id__n" $device_id_n "scalar") (serialize-qp "device__n" $device_n "scalar") (serialize-qp "tag__n" $tag_n "scalar") (serialize-qp "type__n" $type_n "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
@@ -2090,7 +2113,6 @@ export def "dcim-console-ports-list" [
 # POST /dcim/console-ports/
 #
 # operationId: dcim_console-ports_create
-# --cable shape: {label?: string}
 export def "dcim-console-ports-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2108,7 +2130,7 @@ export def "dcim-console-ports-create" [
   name: string
   --tags: list<string>
   --type: string@type-completer-1 # Physical port type
-]: any -> record<cable: record<id: int, label: string, url: string>, connected_endpoint: record, connected_endpoint_type: string, connection_status: record<label: string, value: bool>, description: string, device: record<display_name: string, id: int, name: string, url: string>, id: int, name: string, tags: list<string>, type: record<label: string, value: string>> {
+]: any -> oneof<record<cable: record<id: int, label: string, url: string>, connected_endpoint: record, connected_endpoint_type: string, connection_status: record<label: string, value: bool>, description: string, device: record<display_name: string, id: int, name: string, url: string>, id: int, name: string, tags: list<string>, type: record<label: string, value: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2181,7 +2203,7 @@ export def "dcim-console-ports-read" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<cable: record<id: int, label: string, url: string>, connected_endpoint: record, connected_endpoint_type: string, connection_status: record<label: string, value: bool>, description: string, device: record<display_name: string, id: int, name: string, url: string>, id: int, name: string, tags: list<string>, type: record<label: string, value: string>> {
+]: nothing -> oneof<record<cable: record<id: int, label: string, url: string>, connected_endpoint: record, connected_endpoint_type: string, connection_status: record<label: string, value: bool>, description: string, device: record<display_name: string, id: int, name: string, url: string>, id: int, name: string, tags: list<string>, type: record<label: string, value: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2205,7 +2227,6 @@ export def "dcim-console-ports-read" [
 # PATCH /dcim/console-ports/{id}/
 #
 # operationId: dcim_console-ports_partial_update
-# --cable shape: {label?: string}
 export def "dcim-console-ports-partial-update" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -2224,7 +2245,7 @@ export def "dcim-console-ports-partial-update" [
   name: string
   --tags: list<string>
   --type: string@type-completer-1 # Physical port type
-]: any -> record<cable: record<id: int, label: string, url: string>, connected_endpoint: record, connected_endpoint_type: string, connection_status: record<label: string, value: bool>, description: string, device: record<display_name: string, id: int, name: string, url: string>, id: int, name: string, tags: list<string>, type: record<label: string, value: string>> {
+]: any -> oneof<record<cable: record<id: int, label: string, url: string>, connected_endpoint: record, connected_endpoint_type: string, connection_status: record<label: string, value: bool>, description: string, device: record<display_name: string, id: int, name: string, url: string>, id: int, name: string, tags: list<string>, type: record<label: string, value: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2251,7 +2272,6 @@ export def "dcim-console-ports-partial-update" [
 # PUT /dcim/console-ports/{id}/
 #
 # operationId: dcim_console-ports_update
-# --cable shape: {label?: string}
 export def "dcim-console-ports-update" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -2270,7 +2290,7 @@ export def "dcim-console-ports-update" [
   name: string
   --tags: list<string>
   --type: string@type-completer-1 # Physical port type
-]: any -> record<cable: record<id: int, label: string, url: string>, connected_endpoint: record, connected_endpoint_type: string, connection_status: record<label: string, value: bool>, description: string, device: record<display_name: string, id: int, name: string, url: string>, id: int, name: string, tags: list<string>, type: record<label: string, value: string>> {
+]: any -> oneof<record<cable: record<id: int, label: string, url: string>, connected_endpoint: record, connected_endpoint_type: string, connection_status: record<label: string, value: bool>, description: string, device: record<display_name: string, id: int, name: string, url: string>, id: int, name: string, tags: list<string>, type: record<label: string, value: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2309,7 +2329,7 @@ export def "dcim-console-ports-trace" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<cable: record<id: int, label: string, url: string>, connected_endpoint: record, connected_endpoint_type: string, connection_status: record<label: string, value: bool>, description: string, device: record<display_name: string, id: int, name: string, url: string>, id: int, name: string, tags: list<string>, type: record<label: string, value: string>> {
+]: nothing -> oneof<record<cable: record<id: int, label: string, url: string>, connected_endpoint: record, connected_endpoint_type: string, connection_status: record<label: string, value: bool>, description: string, device: record<display_name: string, id: int, name: string, url: string>, id: int, name: string, tags: list<string>, type: record<label: string, value: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2367,7 +2387,7 @@ export def "dcim-console-server-port-templates-list" [
   --devicetype-id-n: string
   --limit: int # Number of results to return per page.
   --offset: int # The initial index from which to return the results.
-]: nothing -> record<count: int, next: string, previous: string, results: table<device_type: record, id: int, name: string, type: record>> {
+]: nothing -> oneof<record<count: int, next: string, previous: string, results: table<device_type: record, id: int, name: string, type: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "devicetype_id" $devicetype_id "scalar") (serialize-qp "id__n" $id_n "scalar") (serialize-qp "id__lte" $id_lte "scalar") (serialize-qp "id__lt" $id_lt "scalar") (serialize-qp "id__gte" $id_gte "scalar") (serialize-qp "id__gt" $id_gt "scalar") (serialize-qp "name__n" $name_n "scalar") (serialize-qp "name__ic" $name_ic "scalar") (serialize-qp "name__nic" $name_nic "scalar") (serialize-qp "name__iew" $name_iew "scalar") (serialize-qp "name__niew" $name_niew "scalar") (serialize-qp "name__isw" $name_isw "scalar") (serialize-qp "name__nisw" $name_nisw "scalar") (serialize-qp "name__ie" $name_ie "scalar") (serialize-qp "name__nie" $name_nie "scalar") (serialize-qp "type__n" $type_n "scalar") (serialize-qp "devicetype_id__n" $devicetype_id_n "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
@@ -2404,7 +2424,7 @@ export def "dcim-console-server-port-templates-create" [
   device_type: int
   name: string
   --type: string@type-completer-1
-]: any -> record<device_type: record<device_count: int, display_name: string, id: int, manufacturer: record<devicetype_count: int, id: int, name: string, slug: string, url: string>, model: string, slug: string, url: string>, id: int, name: string, type: record<label: string, value: string>> {
+]: any -> oneof<record<device_type: record<device_count: int, display_name: string, id: int, manufacturer: record<devicetype_count: int, id: int, name: string, slug: string, url: string>, model: string, slug: string, url: string>, id: int, name: string, type: record<label: string, value: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2477,7 +2497,7 @@ export def "dcim-console-server-port-templates-read" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<device_type: record<device_count: int, display_name: string, id: int, manufacturer: record<devicetype_count: int, id: int, name: string, slug: string, url: string>, model: string, slug: string, url: string>, id: int, name: string, type: record<label: string, value: string>> {
+]: nothing -> oneof<record<device_type: record<device_count: int, display_name: string, id: int, manufacturer: record<devicetype_count: int, id: int, name: string, slug: string, url: string>, model: string, slug: string, url: string>, id: int, name: string, type: record<label: string, value: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2515,7 +2535,7 @@ export def "dcim-console-server-port-templates-partial-update" [
   device_type: int
   name: string
   --type: string@type-completer-1
-]: any -> record<device_type: record<device_count: int, display_name: string, id: int, manufacturer: record<devicetype_count: int, id: int, name: string, slug: string, url: string>, model: string, slug: string, url: string>, id: int, name: string, type: record<label: string, value: string>> {
+]: any -> oneof<record<device_type: record<device_count: int, display_name: string, id: int, manufacturer: record<devicetype_count: int, id: int, name: string, slug: string, url: string>, model: string, slug: string, url: string>, id: int, name: string, type: record<label: string, value: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2556,7 +2576,7 @@ export def "dcim-console-server-port-templates-update" [
   device_type: int
   name: string
   --type: string@type-completer-1
-]: any -> record<device_type: record<device_count: int, display_name: string, id: int, manufacturer: record<devicetype_count: int, id: int, name: string, slug: string, url: string>, model: string, slug: string, url: string>, id: int, name: string, type: record<label: string, value: string>> {
+]: any -> oneof<record<device_type: record<device_count: int, display_name: string, id: int, manufacturer: record<devicetype_count: int, id: int, name: string, slug: string, url: string>, model: string, slug: string, url: string>, id: int, name: string, type: record<label: string, value: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2642,7 +2662,7 @@ export def "dcim-console-server-ports-list" [
   --type-n: string
   --limit: int # Number of results to return per page.
   --offset: int # The initial index from which to return the results.
-]: nothing -> record<count: int, next: string, previous: string, results: table<cable: record, connected_endpoint: record, connected_endpoint_type: string, connection_status: record, description: string, device: record, id: int, name: string, tags: list, type: record>> {
+]: nothing -> oneof<record<count: int, next: string, previous: string, results: table<cable: record, connected_endpoint: record, connected_endpoint_type: string, connection_status: record, description: string, device: record, id: int, name: string, tags: list, type: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "connection_status" $connection_status "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "region_id" $region_id "scalar") (serialize-qp "region" $region "scalar") (serialize-qp "site_id" $site_id "scalar") (serialize-qp "site" $site "scalar") (serialize-qp "device_id" $device_id "scalar") (serialize-qp "device" $device "scalar") (serialize-qp "tag" $tag "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "cabled" $cabled "scalar") (serialize-qp "id__n" $id_n "scalar") (serialize-qp "id__lte" $id_lte "scalar") (serialize-qp "id__lt" $id_lt "scalar") (serialize-qp "id__gte" $id_gte "scalar") (serialize-qp "id__gt" $id_gt "scalar") (serialize-qp "name__n" $name_n "scalar") (serialize-qp "name__ic" $name_ic "scalar") (serialize-qp "name__nic" $name_nic "scalar") (serialize-qp "name__iew" $name_iew "scalar") (serialize-qp "name__niew" $name_niew "scalar") (serialize-qp "name__isw" $name_isw "scalar") (serialize-qp "name__nisw" $name_nisw "scalar") (serialize-qp "name__ie" $name_ie "scalar") (serialize-qp "name__nie" $name_nie "scalar") (serialize-qp "description__n" $description_n "scalar") (serialize-qp "description__ic" $description_ic "scalar") (serialize-qp "description__nic" $description_nic "scalar") (serialize-qp "description__iew" $description_iew "scalar") (serialize-qp "description__niew" $description_niew "scalar") (serialize-qp "description__isw" $description_isw "scalar") (serialize-qp "description__nisw" $description_nisw "scalar") (serialize-qp "description__ie" $description_ie "scalar") (serialize-qp "description__nie" $description_nie "scalar") (serialize-qp "connection_status__n" $connection_status_n "scalar") (serialize-qp "region_id__n" $region_id_n "scalar") (serialize-qp "region__n" $region_n "scalar") (serialize-qp "site_id__n" $site_id_n "scalar") (serialize-qp "site__n" $site_n "scalar") (serialize-qp "device_id__n" $device_id_n "scalar") (serialize-qp "device__n" $device_n "scalar") (serialize-qp "tag__n" $tag_n "scalar") (serialize-qp "type__n" $type_n "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
@@ -2666,7 +2686,6 @@ export def "dcim-console-server-ports-list" [
 # POST /dcim/console-server-ports/
 #
 # operationId: dcim_console-server-ports_create
-# --cable shape: {label?: string}
 export def "dcim-console-server-ports-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2684,7 +2703,7 @@ export def "dcim-console-server-ports-create" [
   name: string
   --tags: list<string>
   --type: string@type-completer-1 # Physical port type
-]: any -> record<cable: record<id: int, label: string, url: string>, connected_endpoint: record, connected_endpoint_type: string, connection_status: record<label: string, value: bool>, description: string, device: record<display_name: string, id: int, name: string, url: string>, id: int, name: string, tags: list<string>, type: record<label: string, value: string>> {
+]: any -> oneof<record<cable: record<id: int, label: string, url: string>, connected_endpoint: record, connected_endpoint_type: string, connection_status: record<label: string, value: bool>, description: string, device: record<display_name: string, id: int, name: string, url: string>, id: int, name: string, tags: list<string>, type: record<label: string, value: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2757,7 +2776,7 @@ export def "dcim-console-server-ports-read" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<cable: record<id: int, label: string, url: string>, connected_endpoint: record, connected_endpoint_type: string, connection_status: record<label: string, value: bool>, description: string, device: record<display_name: string, id: int, name: string, url: string>, id: int, name: string, tags: list<string>, type: record<label: string, value: string>> {
+]: nothing -> oneof<record<cable: record<id: int, label: string, url: string>, connected_endpoint: record, connected_endpoint_type: string, connection_status: record<label: string, value: bool>, description: string, device: record<display_name: string, id: int, name: string, url: string>, id: int, name: string, tags: list<string>, type: record<label: string, value: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2781,7 +2800,6 @@ export def "dcim-console-server-ports-read" [
 # PATCH /dcim/console-server-ports/{id}/
 #
 # operationId: dcim_console-server-ports_partial_update
-# --cable shape: {label?: string}
 export def "dcim-console-server-ports-partial-update" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -2800,7 +2818,7 @@ export def "dcim-console-server-ports-partial-update" [
   name: string
   --tags: list<string>
   --type: string@type-completer-1 # Physical port type
-]: any -> record<cable: record<id: int, label: string, url: string>, connected_endpoint: record, connected_endpoint_type: string, connection_status: record<label: string, value: bool>, description: string, device: record<display_name: string, id: int, name: string, url: string>, id: int, name: string, tags: list<string>, type: record<label: string, value: string>> {
+]: any -> oneof<record<cable: record<id: int, label: string, url: string>, connected_endpoint: record, connected_endpoint_type: string, connection_status: record<label: string, value: bool>, description: string, device: record<display_name: string, id: int, name: string, url: string>, id: int, name: string, tags: list<string>, type: record<label: string, value: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2827,7 +2845,6 @@ export def "dcim-console-server-ports-partial-update" [
 # PUT /dcim/console-server-ports/{id}/
 #
 # operationId: dcim_console-server-ports_update
-# --cable shape: {label?: string}
 export def "dcim-console-server-ports-update" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -2846,7 +2863,7 @@ export def "dcim-console-server-ports-update" [
   name: string
   --tags: list<string>
   --type: string@type-completer-1 # Physical port type
-]: any -> record<cable: record<id: int, label: string, url: string>, connected_endpoint: record, connected_endpoint_type: string, connection_status: record<label: string, value: bool>, description: string, device: record<display_name: string, id: int, name: string, url: string>, id: int, name: string, tags: list<string>, type: record<label: string, value: string>> {
+]: any -> oneof<record<cable: record<id: int, label: string, url: string>, connected_endpoint: record, connected_endpoint_type: string, connection_status: record<label: string, value: bool>, description: string, device: record<display_name: string, id: int, name: string, url: string>, id: int, name: string, tags: list<string>, type: record<label: string, value: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2885,7 +2902,7 @@ export def "dcim-console-server-ports-trace" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<cable: record<id: int, label: string, url: string>, connected_endpoint: record, connected_endpoint_type: string, connection_status: record<label: string, value: bool>, description: string, device: record<display_name: string, id: int, name: string, url: string>, id: int, name: string, tags: list<string>, type: record<label: string, value: string>> {
+]: nothing -> oneof<record<cable: record<id: int, label: string, url: string>, connected_endpoint: record, connected_endpoint_type: string, connection_status: record<label: string, value: bool>, description: string, device: record<display_name: string, id: int, name: string, url: string>, id: int, name: string, tags: list<string>, type: record<label: string, value: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2941,7 +2958,7 @@ export def "dcim-device-bay-templates-list" [
   --devicetype-id-n: string
   --limit: int # Number of results to return per page.
   --offset: int # The initial index from which to return the results.
-]: nothing -> record<count: int, next: string, previous: string, results: table<device_type: record, id: int, name: string>> {
+]: nothing -> oneof<record<count: int, next: string, previous: string, results: table<device_type: record, id: int, name: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "devicetype_id" $devicetype_id "scalar") (serialize-qp "id__n" $id_n "scalar") (serialize-qp "id__lte" $id_lte "scalar") (serialize-qp "id__lt" $id_lt "scalar") (serialize-qp "id__gte" $id_gte "scalar") (serialize-qp "id__gt" $id_gt "scalar") (serialize-qp "name__n" $name_n "scalar") (serialize-qp "name__ic" $name_ic "scalar") (serialize-qp "name__nic" $name_nic "scalar") (serialize-qp "name__iew" $name_iew "scalar") (serialize-qp "name__niew" $name_niew "scalar") (serialize-qp "name__isw" $name_isw "scalar") (serialize-qp "name__nisw" $name_nisw "scalar") (serialize-qp "name__ie" $name_ie "scalar") (serialize-qp "name__nie" $name_nie "scalar") (serialize-qp "devicetype_id__n" $devicetype_id_n "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
@@ -2977,7 +2994,7 @@ export def "dcim-device-bay-templates-create" [
   --dry-run(-n) # Return the request that would be sent without executing it
   device_type: int
   name: string
-]: any -> record<device_type: record<device_count: int, display_name: string, id: int, manufacturer: record<devicetype_count: int, id: int, name: string, slug: string, url: string>, model: string, slug: string, url: string>, id: int, name: string> {
+]: any -> oneof<record<device_type: record<device_count: int, display_name: string, id: int, manufacturer: record<devicetype_count: int, id: int, name: string, slug: string, url: string>, model: string, slug: string, url: string>, id: int, name: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3050,7 +3067,7 @@ export def "dcim-device-bay-templates-read" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<device_type: record<device_count: int, display_name: string, id: int, manufacturer: record<devicetype_count: int, id: int, name: string, slug: string, url: string>, model: string, slug: string, url: string>, id: int, name: string> {
+]: nothing -> oneof<record<device_type: record<device_count: int, display_name: string, id: int, manufacturer: record<devicetype_count: int, id: int, name: string, slug: string, url: string>, model: string, slug: string, url: string>, id: int, name: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3087,7 +3104,7 @@ export def "dcim-device-bay-templates-partial-update" [
   --dry-run(-n) # Return the request that would be sent without executing it
   device_type: int
   name: string
-]: any -> record<device_type: record<device_count: int, display_name: string, id: int, manufacturer: record<devicetype_count: int, id: int, name: string, slug: string, url: string>, model: string, slug: string, url: string>, id: int, name: string> {
+]: any -> oneof<record<device_type: record<device_count: int, display_name: string, id: int, manufacturer: record<devicetype_count: int, id: int, name: string, slug: string, url: string>, model: string, slug: string, url: string>, id: int, name: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3127,7 +3144,7 @@ export def "dcim-device-bay-templates-update" [
   --dry-run(-n) # Return the request that would be sent without executing it
   device_type: int
   name: string
-]: any -> record<device_type: record<device_count: int, display_name: string, id: int, manufacturer: record<devicetype_count: int, id: int, name: string, slug: string, url: string>, model: string, slug: string, url: string>, id: int, name: string> {
+]: any -> oneof<record<device_type: record<device_count: int, display_name: string, id: int, manufacturer: record<devicetype_count: int, id: int, name: string, slug: string, url: string>, model: string, slug: string, url: string>, id: int, name: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3208,7 +3225,7 @@ export def "dcim-device-bays-list" [
   --tag-n: string
   --limit: int # Number of results to return per page.
   --offset: int # The initial index from which to return the results.
-]: nothing -> record<count: int, next: string, previous: string, results: table<description: string, device: record, id: int, installed_device: record, name: string, tags: list>> {
+]: nothing -> oneof<record<count: int, next: string, previous: string, results: table<description: string, device: record, id: int, installed_device: record, name: string, tags: list>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "region_id" $region_id "scalar") (serialize-qp "region" $region "scalar") (serialize-qp "site_id" $site_id "scalar") (serialize-qp "site" $site "scalar") (serialize-qp "device_id" $device_id "scalar") (serialize-qp "device" $device "scalar") (serialize-qp "tag" $tag "scalar") (serialize-qp "id__n" $id_n "scalar") (serialize-qp "id__lte" $id_lte "scalar") (serialize-qp "id__lt" $id_lt "scalar") (serialize-qp "id__gte" $id_gte "scalar") (serialize-qp "id__gt" $id_gt "scalar") (serialize-qp "name__n" $name_n "scalar") (serialize-qp "name__ic" $name_ic "scalar") (serialize-qp "name__nic" $name_nic "scalar") (serialize-qp "name__iew" $name_iew "scalar") (serialize-qp "name__niew" $name_niew "scalar") (serialize-qp "name__isw" $name_isw "scalar") (serialize-qp "name__nisw" $name_nisw "scalar") (serialize-qp "name__ie" $name_ie "scalar") (serialize-qp "name__nie" $name_nie "scalar") (serialize-qp "description__n" $description_n "scalar") (serialize-qp "description__ic" $description_ic "scalar") (serialize-qp "description__nic" $description_nic "scalar") (serialize-qp "description__iew" $description_iew "scalar") (serialize-qp "description__niew" $description_niew "scalar") (serialize-qp "description__isw" $description_isw "scalar") (serialize-qp "description__nisw" $description_nisw "scalar") (serialize-qp "description__ie" $description_ie "scalar") (serialize-qp "description__nie" $description_nie "scalar") (serialize-qp "region_id__n" $region_id_n "scalar") (serialize-qp "region__n" $region_n "scalar") (serialize-qp "site_id__n" $site_id_n "scalar") (serialize-qp "site__n" $site_n "scalar") (serialize-qp "device_id__n" $device_id_n "scalar") (serialize-qp "device__n" $device_n "scalar") (serialize-qp "tag__n" $tag_n "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
@@ -3247,7 +3264,7 @@ export def "dcim-device-bays-create" [
   --installed-device: int # nullable
   name: string
   --tags: list<string>
-]: any -> record<description: string, device: record<display_name: string, id: int, name: string, url: string>, id: int, installed_device: record<display_name: string, id: int, name: string, url: string>, name: string, tags: list<string>> {
+]: any -> oneof<record<description: string, device: record<display_name: string, id: int, name: string, url: string>, id: int, installed_device: record<display_name: string, id: int, name: string, url: string>, name: string, tags: list<string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3320,7 +3337,7 @@ export def "dcim-device-bays-read" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<description: string, device: record<display_name: string, id: int, name: string, url: string>, id: int, installed_device: record<display_name: string, id: int, name: string, url: string>, name: string, tags: list<string>> {
+]: nothing -> oneof<record<description: string, device: record<display_name: string, id: int, name: string, url: string>, id: int, installed_device: record<display_name: string, id: int, name: string, url: string>, name: string, tags: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3360,7 +3377,7 @@ export def "dcim-device-bays-partial-update" [
   --installed-device: int # nullable
   name: string
   --tags: list<string>
-]: any -> record<description: string, device: record<display_name: string, id: int, name: string, url: string>, id: int, installed_device: record<display_name: string, id: int, name: string, url: string>, name: string, tags: list<string>> {
+]: any -> oneof<record<description: string, device: record<display_name: string, id: int, name: string, url: string>, id: int, installed_device: record<display_name: string, id: int, name: string, url: string>, name: string, tags: list<string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3403,7 +3420,7 @@ export def "dcim-device-bays-update" [
   --installed-device: int # nullable
   name: string
   --tags: list<string>
-]: any -> record<description: string, device: record<display_name: string, id: int, name: string, url: string>, id: int, installed_device: record<display_name: string, id: int, name: string, url: string>, name: string, tags: list<string>> {
+]: any -> oneof<record<description: string, device: record<display_name: string, id: int, name: string, url: string>, id: int, installed_device: record<display_name: string, id: int, name: string, url: string>, name: string, tags: list<string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3481,7 +3498,7 @@ export def "dcim-device-roles-list" [
   --color-nie: string
   --limit: int # Number of results to return per page.
   --offset: int # The initial index from which to return the results.
-]: nothing -> record<count: int, next: string, previous: string, results: table<color: string, description: string, device_count: int, id: int, name: string, slug: string, virtualmachine_count: int, vm_role: bool>> {
+]: nothing -> oneof<record<count: int, next: string, previous: string, results: table<color: string, description: string, device_count: int, id: int, name: string, slug: string, virtualmachine_count: int, vm_role: bool>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "slug" $slug "scalar") (serialize-qp "color" $color "scalar") (serialize-qp "vm_role" $vm_role "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "id__n" $id_n "scalar") (serialize-qp "id__lte" $id_lte "scalar") (serialize-qp "id__lt" $id_lt "scalar") (serialize-qp "id__gte" $id_gte "scalar") (serialize-qp "id__gt" $id_gt "scalar") (serialize-qp "name__n" $name_n "scalar") (serialize-qp "name__ic" $name_ic "scalar") (serialize-qp "name__nic" $name_nic "scalar") (serialize-qp "name__iew" $name_iew "scalar") (serialize-qp "name__niew" $name_niew "scalar") (serialize-qp "name__isw" $name_isw "scalar") (serialize-qp "name__nisw" $name_nisw "scalar") (serialize-qp "name__ie" $name_ie "scalar") (serialize-qp "name__nie" $name_nie "scalar") (serialize-qp "slug__n" $slug_n "scalar") (serialize-qp "slug__ic" $slug_ic "scalar") (serialize-qp "slug__nic" $slug_nic "scalar") (serialize-qp "slug__iew" $slug_iew "scalar") (serialize-qp "slug__niew" $slug_niew "scalar") (serialize-qp "slug__isw" $slug_isw "scalar") (serialize-qp "slug__nisw" $slug_nisw "scalar") (serialize-qp "slug__ie" $slug_ie "scalar") (serialize-qp "slug__nie" $slug_nie "scalar") (serialize-qp "color__n" $color_n "scalar") (serialize-qp "color__ic" $color_ic "scalar") (serialize-qp "color__nic" $color_nic "scalar") (serialize-qp "color__iew" $color_iew "scalar") (serialize-qp "color__niew" $color_niew "scalar") (serialize-qp "color__isw" $color_isw "scalar") (serialize-qp "color__nisw" $color_nisw "scalar") (serialize-qp "color__ie" $color_ie "scalar") (serialize-qp "color__nie" $color_nie "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
@@ -3520,7 +3537,7 @@ export def "dcim-device-roles-create" [
   name: string
   slug: string # format: slug
   --vm-role: oneof<nothing, bool> # Virtual machines may be assigned to this role
-]: any -> record<color: string, description: string, device_count: int, id: int, name: string, slug: string, virtualmachine_count: int, vm_role: bool> {
+]: any -> oneof<record<color: string, description: string, device_count: int, id: int, name: string, slug: string, virtualmachine_count: int, vm_role: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3593,7 +3610,7 @@ export def "dcim-device-roles-read" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<color: string, description: string, device_count: int, id: int, name: string, slug: string, virtualmachine_count: int, vm_role: bool> {
+]: nothing -> oneof<record<color: string, description: string, device_count: int, id: int, name: string, slug: string, virtualmachine_count: int, vm_role: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3633,7 +3650,7 @@ export def "dcim-device-roles-partial-update" [
   name: string
   slug: string # format: slug
   --vm-role: oneof<nothing, bool> # Virtual machines may be assigned to this role
-]: any -> record<color: string, description: string, device_count: int, id: int, name: string, slug: string, virtualmachine_count: int, vm_role: bool> {
+]: any -> oneof<record<color: string, description: string, device_count: int, id: int, name: string, slug: string, virtualmachine_count: int, vm_role: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3676,7 +3693,7 @@ export def "dcim-device-roles-update" [
   name: string
   slug: string # format: slug
   --vm-role: oneof<nothing, bool> # Virtual machines may be assigned to this role
-]: any -> record<color: string, description: string, device_count: int, id: int, name: string, slug: string, virtualmachine_count: int, vm_role: bool> {
+]: any -> oneof<record<color: string, description: string, device_count: int, id: int, name: string, slug: string, virtualmachine_count: int, vm_role: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3781,7 +3798,7 @@ export def "dcim-device-types-list" [
   --tag-n: string
   --limit: int # Number of results to return per page.
   --offset: int # The initial index from which to return the results.
-]: nothing -> record<count: int, next: string, previous: string, results: table<comments: string, created: string, custom_fields: record, device_count: int, display_name: string, front_image: string, id: int, is_full_depth: bool, last_updated: string, manufacturer: record, model: string, part_number: string, rear_image: string, slug: string, subdevice_role: record, tags: list, u_height: int>> {
+]: nothing -> oneof<record<count: int, next: string, previous: string, results: table<comments: string, created: string, custom_fields: record, device_count: int, display_name: string, front_image: string, id: int, is_full_depth: bool, last_updated: string, manufacturer: record, model: string, part_number: string, rear_image: string, slug: string, subdevice_role: record, tags: list, u_height: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "model" $model "scalar") (serialize-qp "slug" $slug "scalar") (serialize-qp "part_number" $part_number "scalar") (serialize-qp "u_height" $u_height "scalar") (serialize-qp "is_full_depth" $is_full_depth "scalar") (serialize-qp "subdevice_role" $subdevice_role "scalar") (serialize-qp "created" $created "scalar") (serialize-qp "created__gte" $created_gte "scalar") (serialize-qp "created__lte" $created_lte "scalar") (serialize-qp "last_updated" $last_updated "scalar") (serialize-qp "last_updated__gte" $last_updated_gte "scalar") (serialize-qp "last_updated__lte" $last_updated_lte "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "manufacturer_id" $manufacturer_id "scalar") (serialize-qp "manufacturer" $manufacturer "scalar") (serialize-qp "console_ports" $console_ports "scalar") (serialize-qp "console_server_ports" $console_server_ports "scalar") (serialize-qp "power_ports" $power_ports "scalar") (serialize-qp "power_outlets" $power_outlets "scalar") (serialize-qp "interfaces" $interfaces "scalar") (serialize-qp "pass_through_ports" $pass_through_ports "scalar") (serialize-qp "device_bays" $device_bays "scalar") (serialize-qp "tag" $tag "scalar") (serialize-qp "id__n" $id_n "scalar") (serialize-qp "id__lte" $id_lte "scalar") (serialize-qp "id__lt" $id_lt "scalar") (serialize-qp "id__gte" $id_gte "scalar") (serialize-qp "id__gt" $id_gt "scalar") (serialize-qp "model__n" $model_n "scalar") (serialize-qp "model__ic" $model_ic "scalar") (serialize-qp "model__nic" $model_nic "scalar") (serialize-qp "model__iew" $model_iew "scalar") (serialize-qp "model__niew" $model_niew "scalar") (serialize-qp "model__isw" $model_isw "scalar") (serialize-qp "model__nisw" $model_nisw "scalar") (serialize-qp "model__ie" $model_ie "scalar") (serialize-qp "model__nie" $model_nie "scalar") (serialize-qp "slug__n" $slug_n "scalar") (serialize-qp "slug__ic" $slug_ic "scalar") (serialize-qp "slug__nic" $slug_nic "scalar") (serialize-qp "slug__iew" $slug_iew "scalar") (serialize-qp "slug__niew" $slug_niew "scalar") (serialize-qp "slug__isw" $slug_isw "scalar") (serialize-qp "slug__nisw" $slug_nisw "scalar") (serialize-qp "slug__ie" $slug_ie "scalar") (serialize-qp "slug__nie" $slug_nie "scalar") (serialize-qp "part_number__n" $part_number_n "scalar") (serialize-qp "part_number__ic" $part_number_ic "scalar") (serialize-qp "part_number__nic" $part_number_nic "scalar") (serialize-qp "part_number__iew" $part_number_iew "scalar") (serialize-qp "part_number__niew" $part_number_niew "scalar") (serialize-qp "part_number__isw" $part_number_isw "scalar") (serialize-qp "part_number__nisw" $part_number_nisw "scalar") (serialize-qp "part_number__ie" $part_number_ie "scalar") (serialize-qp "part_number__nie" $part_number_nie "scalar") (serialize-qp "u_height__n" $u_height_n "scalar") (serialize-qp "u_height__lte" $u_height_lte "scalar") (serialize-qp "u_height__lt" $u_height_lt "scalar") (serialize-qp "u_height__gte" $u_height_gte "scalar") (serialize-qp "u_height__gt" $u_height_gt "scalar") (serialize-qp "subdevice_role__n" $subdevice_role_n "scalar") (serialize-qp "manufacturer_id__n" $manufacturer_id_n "scalar") (serialize-qp "manufacturer__n" $manufacturer_n "scalar") (serialize-qp "tag__n" $tag_n "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
@@ -3825,7 +3842,7 @@ export def "dcim-device-types-create" [
   --subdevice-role: string@subdevice-role-completer # Parent devices house child devices in device bays. Leave blank if this device type is neither a parent nor a child.
   --tags: list<string>
   --u-height: int
-]: any -> record<comments: string, created: string, custom_fields: record, device_count: int, display_name: string, front_image: string, id: int, is_full_depth: bool, last_updated: string, manufacturer: record<devicetype_count: int, id: int, name: string, slug: string, url: string>, model: string, part_number: string, rear_image: string, slug: string, subdevice_role: record<label: string, value: string>, tags: list<string>, u_height: int> {
+]: any -> oneof<record<comments: string, created: string, custom_fields: record, device_count: int, display_name: string, front_image: string, id: int, is_full_depth: bool, last_updated: string, manufacturer: record<devicetype_count: int, id: int, name: string, slug: string, url: string>, model: string, part_number: string, rear_image: string, slug: string, subdevice_role: record<label: string, value: string>, tags: list<string>, u_height: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3898,7 +3915,7 @@ export def "dcim-device-types-read" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<comments: string, created: string, custom_fields: record, device_count: int, display_name: string, front_image: string, id: int, is_full_depth: bool, last_updated: string, manufacturer: record<devicetype_count: int, id: int, name: string, slug: string, url: string>, model: string, part_number: string, rear_image: string, slug: string, subdevice_role: record<label: string, value: string>, tags: list<string>, u_height: int> {
+]: nothing -> oneof<record<comments: string, created: string, custom_fields: record, device_count: int, display_name: string, front_image: string, id: int, is_full_depth: bool, last_updated: string, manufacturer: record<devicetype_count: int, id: int, name: string, slug: string, url: string>, model: string, part_number: string, rear_image: string, slug: string, subdevice_role: record<label: string, value: string>, tags: list<string>, u_height: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3943,7 +3960,7 @@ export def "dcim-device-types-partial-update" [
   --subdevice-role: string@subdevice-role-completer # Parent devices house child devices in device bays. Leave blank if this device type is neither a parent nor a child.
   --tags: list<string>
   --u-height: int
-]: any -> record<comments: string, created: string, custom_fields: record, device_count: int, display_name: string, front_image: string, id: int, is_full_depth: bool, last_updated: string, manufacturer: record<devicetype_count: int, id: int, name: string, slug: string, url: string>, model: string, part_number: string, rear_image: string, slug: string, subdevice_role: record<label: string, value: string>, tags: list<string>, u_height: int> {
+]: any -> oneof<record<comments: string, created: string, custom_fields: record, device_count: int, display_name: string, front_image: string, id: int, is_full_depth: bool, last_updated: string, manufacturer: record<devicetype_count: int, id: int, name: string, slug: string, url: string>, model: string, part_number: string, rear_image: string, slug: string, subdevice_role: record<label: string, value: string>, tags: list<string>, u_height: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3991,7 +4008,7 @@ export def "dcim-device-types-update" [
   --subdevice-role: string@subdevice-role-completer # Parent devices house child devices in device bays. Leave blank if this device type is neither a parent nor a child.
   --tags: list<string>
   --u-height: int
-]: any -> record<comments: string, created: string, custom_fields: record, device_count: int, display_name: string, front_image: string, id: int, is_full_depth: bool, last_updated: string, manufacturer: record<devicetype_count: int, id: int, name: string, slug: string, url: string>, model: string, part_number: string, rear_image: string, slug: string, subdevice_role: record<label: string, value: string>, tags: list<string>, u_height: int> {
+]: any -> oneof<record<comments: string, created: string, custom_fields: record, device_count: int, display_name: string, front_image: string, id: int, is_full_depth: bool, last_updated: string, manufacturer: record<devicetype_count: int, id: int, name: string, slug: string, url: string>, model: string, part_number: string, rear_image: string, slug: string, subdevice_role: record<label: string, value: string>, tags: list<string>, u_height: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4150,7 +4167,7 @@ export def "dcim-devices-list" [
   --tag-n: string
   --limit: int # Number of results to return per page.
   --offset: int # The initial index from which to return the results.
-]: nothing -> record<count: int, next: string, previous: string, results: table<asset_tag: string, cluster: record, comments: string, config_context: record, created: string, custom_fields: record, device_role: record, device_type: record, display_name: string, face: record, id: int, last_updated: string, local_context_data: string, name: string, parent_device: record, platform: record, position: int, primary_ip: record, primary_ip4: record, primary_ip6: record, rack: record, serial: string, site: record, status: record, tags: list, tenant: record, vc_position: int, vc_priority: int, virtual_chassis: record>> {
+]: nothing -> oneof<record<count: int, next: string, previous: string, results: table<asset_tag: string, cluster: record, comments: string, config_context: record, created: string, custom_fields: record, device_role: record, device_type: record, display_name: string, face: record, id: int, last_updated: string, local_context_data: string, name: string, parent_device: record, platform: record, position: int, primary_ip: record, primary_ip4: record, primary_ip6: record, rack: record, serial: string, site: record, status: record, tags: list, tenant: record, vc_position: int, vc_priority: int, virtual_chassis: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "asset_tag" $asset_tag "scalar") (serialize-qp "face" $face "scalar") (serialize-qp "position" $position "scalar") (serialize-qp "vc_position" $vc_position "scalar") (serialize-qp "vc_priority" $vc_priority "scalar") (serialize-qp "tenant_group_id" $tenant_group_id "scalar") (serialize-qp "tenant_group" $tenant_group "scalar") (serialize-qp "tenant_id" $tenant_id "scalar") (serialize-qp "tenant" $tenant "scalar") (serialize-qp "local_context_data" $local_context_data "scalar") (serialize-qp "created" $created "scalar") (serialize-qp "created__gte" $created_gte "scalar") (serialize-qp "created__lte" $created_lte "scalar") (serialize-qp "last_updated" $last_updated "scalar") (serialize-qp "last_updated__gte" $last_updated_gte "scalar") (serialize-qp "last_updated__lte" $last_updated_lte "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "manufacturer_id" $manufacturer_id "scalar") (serialize-qp "manufacturer" $manufacturer "scalar") (serialize-qp "device_type_id" $device_type_id "scalar") (serialize-qp "role_id" $role_id "scalar") (serialize-qp "role" $role "scalar") (serialize-qp "platform_id" $platform_id "scalar") (serialize-qp "platform" $platform "scalar") (serialize-qp "region_id" $region_id "scalar") (serialize-qp "region" $region "scalar") (serialize-qp "site_id" $site_id "scalar") (serialize-qp "site" $site "scalar") (serialize-qp "rack_group_id" $rack_group_id "scalar") (serialize-qp "rack_id" $rack_id "scalar") (serialize-qp "cluster_id" $cluster_id "scalar") (serialize-qp "model" $model "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "is_full_depth" $is_full_depth "scalar") (serialize-qp "mac_address" $mac_address "scalar") (serialize-qp "serial" $serial "scalar") (serialize-qp "has_primary_ip" $has_primary_ip "scalar") (serialize-qp "virtual_chassis_id" $virtual_chassis_id "scalar") (serialize-qp "virtual_chassis_member" $virtual_chassis_member "scalar") (serialize-qp "console_ports" $console_ports "scalar") (serialize-qp "console_server_ports" $console_server_ports "scalar") (serialize-qp "power_ports" $power_ports "scalar") (serialize-qp "power_outlets" $power_outlets "scalar") (serialize-qp "interfaces" $interfaces "scalar") (serialize-qp "pass_through_ports" $pass_through_ports "scalar") (serialize-qp "device_bays" $device_bays "scalar") (serialize-qp "tag" $tag "scalar") (serialize-qp "id__n" $id_n "scalar") (serialize-qp "id__lte" $id_lte "scalar") (serialize-qp "id__lt" $id_lt "scalar") (serialize-qp "id__gte" $id_gte "scalar") (serialize-qp "id__gt" $id_gt "scalar") (serialize-qp "name__n" $name_n "scalar") (serialize-qp "name__ic" $name_ic "scalar") (serialize-qp "name__nic" $name_nic "scalar") (serialize-qp "name__iew" $name_iew "scalar") (serialize-qp "name__niew" $name_niew "scalar") (serialize-qp "name__isw" $name_isw "scalar") (serialize-qp "name__nisw" $name_nisw "scalar") (serialize-qp "name__ie" $name_ie "scalar") (serialize-qp "name__nie" $name_nie "scalar") (serialize-qp "asset_tag__n" $asset_tag_n "scalar") (serialize-qp "asset_tag__ic" $asset_tag_ic "scalar") (serialize-qp "asset_tag__nic" $asset_tag_nic "scalar") (serialize-qp "asset_tag__iew" $asset_tag_iew "scalar") (serialize-qp "asset_tag__niew" $asset_tag_niew "scalar") (serialize-qp "asset_tag__isw" $asset_tag_isw "scalar") (serialize-qp "asset_tag__nisw" $asset_tag_nisw "scalar") (serialize-qp "asset_tag__ie" $asset_tag_ie "scalar") (serialize-qp "asset_tag__nie" $asset_tag_nie "scalar") (serialize-qp "face__n" $face_n "scalar") (serialize-qp "position__n" $position_n "scalar") (serialize-qp "position__lte" $position_lte "scalar") (serialize-qp "position__lt" $position_lt "scalar") (serialize-qp "position__gte" $position_gte "scalar") (serialize-qp "position__gt" $position_gt "scalar") (serialize-qp "vc_position__n" $vc_position_n "scalar") (serialize-qp "vc_position__lte" $vc_position_lte "scalar") (serialize-qp "vc_position__lt" $vc_position_lt "scalar") (serialize-qp "vc_position__gte" $vc_position_gte "scalar") (serialize-qp "vc_position__gt" $vc_position_gt "scalar") (serialize-qp "vc_priority__n" $vc_priority_n "scalar") (serialize-qp "vc_priority__lte" $vc_priority_lte "scalar") (serialize-qp "vc_priority__lt" $vc_priority_lt "scalar") (serialize-qp "vc_priority__gte" $vc_priority_gte "scalar") (serialize-qp "vc_priority__gt" $vc_priority_gt "scalar") (serialize-qp "tenant_group_id__n" $tenant_group_id_n "scalar") (serialize-qp "tenant_group__n" $tenant_group_n "scalar") (serialize-qp "tenant_id__n" $tenant_id_n "scalar") (serialize-qp "tenant__n" $tenant_n "scalar") (serialize-qp "manufacturer_id__n" $manufacturer_id_n "scalar") (serialize-qp "manufacturer__n" $manufacturer_n "scalar") (serialize-qp "device_type_id__n" $device_type_id_n "scalar") (serialize-qp "role_id__n" $role_id_n "scalar") (serialize-qp "role__n" $role_n "scalar") (serialize-qp "platform_id__n" $platform_id_n "scalar") (serialize-qp "platform__n" $platform_n "scalar") (serialize-qp "region_id__n" $region_id_n "scalar") (serialize-qp "region__n" $region_n "scalar") (serialize-qp "site_id__n" $site_id_n "scalar") (serialize-qp "site__n" $site_n "scalar") (serialize-qp "rack_group_id__n" $rack_group_id_n "scalar") (serialize-qp "rack_id__n" $rack_id_n "scalar") (serialize-qp "cluster_id__n" $cluster_id_n "scalar") (serialize-qp "model__n" $model_n "scalar") (serialize-qp "status__n" $status_n "scalar") (serialize-qp "mac_address__n" $mac_address_n "scalar") (serialize-qp "mac_address__ic" $mac_address_ic "scalar") (serialize-qp "mac_address__nic" $mac_address_nic "scalar") (serialize-qp "mac_address__iew" $mac_address_iew "scalar") (serialize-qp "mac_address__niew" $mac_address_niew "scalar") (serialize-qp "mac_address__isw" $mac_address_isw "scalar") (serialize-qp "mac_address__nisw" $mac_address_nisw "scalar") (serialize-qp "mac_address__ie" $mac_address_ie "scalar") (serialize-qp "mac_address__nie" $mac_address_nie "scalar") (serialize-qp "virtual_chassis_id__n" $virtual_chassis_id_n "scalar") (serialize-qp "tag__n" $tag_n "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
@@ -4174,7 +4191,6 @@ export def "dcim-devices-list" [
 # POST /dcim/devices/
 #
 # operationId: dcim_devices_create
-# --parent_device shape: {name?: string}
 export def "dcim-devices-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4208,7 +4224,7 @@ export def "dcim-devices-create" [
   --vc-position: int # nullable
   --vc-priority: int # nullable
   --virtual-chassis: int # nullable
-]: any -> record<asset_tag: string, cluster: record<id: int, name: string, url: string, virtualmachine_count: int>, comments: string, config_context: record, created: string, custom_fields: record, device_role: record<device_count: int, id: int, name: string, slug: string, url: string, virtualmachine_count: int>, device_type: record<device_count: int, display_name: string, id: int, manufacturer: record<devicetype_count: int, id: int, name: string, slug: string, url: string>, model: string, slug: string, url: string>, display_name: string, face: record<label: string, value: string>, id: int, last_updated: string, local_context_data: string, name: string, parent_device: record<display_name: string, id: int, name: string, url: string>, platform: record<device_count: int, id: int, name: string, slug: string, url: string, virtualmachine_count: int>, position: int, primary_ip: record<address: string, family: string, id: int, url: string>, primary_ip4: record<address: string, family: string, id: int, url: string>, primary_ip6: record<address: string, family: string, id: int, url: string>, rack: record<device_count: int, display_name: string, id: int, name: string, url: string>, serial: string, site: record<id: int, name: string, slug: string, url: string>, status: record<label: string, value: string>, tags: list<string>, tenant: record<id: int, name: string, slug: string, url: string>, vc_position: int, vc_priority: int, virtual_chassis: record<id: int, master: record<display_name: string, id: int, name: string, url: string>, member_count: int, url: string>> {
+]: any -> oneof<record<asset_tag: string, cluster: record<id: int, name: string, url: string, virtualmachine_count: int>, comments: string, config_context: record, created: string, custom_fields: record, device_role: record<device_count: int, id: int, name: string, slug: string, url: string, virtualmachine_count: int>, device_type: record<device_count: int, display_name: string, id: int, manufacturer: record<devicetype_count: int, id: int, name: string, slug: string, url: string>, model: string, slug: string, url: string>, display_name: string, face: record<label: string, value: string>, id: int, last_updated: string, local_context_data: string, name: string, parent_device: record<display_name: string, id: int, name: string, url: string>, platform: record<device_count: int, id: int, name: string, slug: string, url: string, virtualmachine_count: int>, position: int, primary_ip: record<address: string, family: string, id: int, url: string>, primary_ip4: record<address: string, family: string, id: int, url: string>, primary_ip6: record<address: string, family: string, id: int, url: string>, rack: record<device_count: int, display_name: string, id: int, name: string, url: string>, serial: string, site: record<id: int, name: string, slug: string, url: string>, status: record<label: string, value: string>, tags: list<string>, tenant: record<id: int, name: string, slug: string, url: string>, vc_position: int, vc_priority: int, virtual_chassis: record<id: int, master: record<display_name: string, id: int, name: string, url: string>, member_count: int, url: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4281,7 +4297,7 @@ export def "dcim-devices-read" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<asset_tag: string, cluster: record<id: int, name: string, url: string, virtualmachine_count: int>, comments: string, config_context: record, created: string, custom_fields: record, device_role: record<device_count: int, id: int, name: string, slug: string, url: string, virtualmachine_count: int>, device_type: record<device_count: int, display_name: string, id: int, manufacturer: record<devicetype_count: int, id: int, name: string, slug: string, url: string>, model: string, slug: string, url: string>, display_name: string, face: record<label: string, value: string>, id: int, last_updated: string, local_context_data: string, name: string, parent_device: record<display_name: string, id: int, name: string, url: string>, platform: record<device_count: int, id: int, name: string, slug: string, url: string, virtualmachine_count: int>, position: int, primary_ip: record<address: string, family: string, id: int, url: string>, primary_ip4: record<address: string, family: string, id: int, url: string>, primary_ip6: record<address: string, family: string, id: int, url: string>, rack: record<device_count: int, display_name: string, id: int, name: string, url: string>, serial: string, site: record<id: int, name: string, slug: string, url: string>, status: record<label: string, value: string>, tags: list<string>, tenant: record<id: int, name: string, slug: string, url: string>, vc_position: int, vc_priority: int, virtual_chassis: record<id: int, master: record<display_name: string, id: int, name: string, url: string>, member_count: int, url: string>> {
+]: nothing -> oneof<record<asset_tag: string, cluster: record<id: int, name: string, url: string, virtualmachine_count: int>, comments: string, config_context: record, created: string, custom_fields: record, device_role: record<device_count: int, id: int, name: string, slug: string, url: string, virtualmachine_count: int>, device_type: record<device_count: int, display_name: string, id: int, manufacturer: record<devicetype_count: int, id: int, name: string, slug: string, url: string>, model: string, slug: string, url: string>, display_name: string, face: record<label: string, value: string>, id: int, last_updated: string, local_context_data: string, name: string, parent_device: record<display_name: string, id: int, name: string, url: string>, platform: record<device_count: int, id: int, name: string, slug: string, url: string, virtualmachine_count: int>, position: int, primary_ip: record<address: string, family: string, id: int, url: string>, primary_ip4: record<address: string, family: string, id: int, url: string>, primary_ip6: record<address: string, family: string, id: int, url: string>, rack: record<device_count: int, display_name: string, id: int, name: string, url: string>, serial: string, site: record<id: int, name: string, slug: string, url: string>, status: record<label: string, value: string>, tags: list<string>, tenant: record<id: int, name: string, slug: string, url: string>, vc_position: int, vc_priority: int, virtual_chassis: record<id: int, master: record<display_name: string, id: int, name: string, url: string>, member_count: int, url: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -4305,7 +4321,6 @@ export def "dcim-devices-read" [
 # PATCH /dcim/devices/{id}/
 #
 # operationId: dcim_devices_partial_update
-# --parent_device shape: {name?: string}
 export def "dcim-devices-partial-update" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -4340,7 +4355,7 @@ export def "dcim-devices-partial-update" [
   --vc-position: int # nullable
   --vc-priority: int # nullable
   --virtual-chassis: int # nullable
-]: any -> record<asset_tag: string, cluster: record<id: int, name: string, url: string, virtualmachine_count: int>, comments: string, config_context: record, created: string, custom_fields: record, device_role: record<device_count: int, id: int, name: string, slug: string, url: string, virtualmachine_count: int>, device_type: record<device_count: int, display_name: string, id: int, manufacturer: record<devicetype_count: int, id: int, name: string, slug: string, url: string>, model: string, slug: string, url: string>, display_name: string, face: record<label: string, value: string>, id: int, last_updated: string, local_context_data: string, name: string, parent_device: record<display_name: string, id: int, name: string, url: string>, platform: record<device_count: int, id: int, name: string, slug: string, url: string, virtualmachine_count: int>, position: int, primary_ip: record<address: string, family: string, id: int, url: string>, primary_ip4: record<address: string, family: string, id: int, url: string>, primary_ip6: record<address: string, family: string, id: int, url: string>, rack: record<device_count: int, display_name: string, id: int, name: string, url: string>, serial: string, site: record<id: int, name: string, slug: string, url: string>, status: record<label: string, value: string>, tags: list<string>, tenant: record<id: int, name: string, slug: string, url: string>, vc_position: int, vc_priority: int, virtual_chassis: record<id: int, master: record<display_name: string, id: int, name: string, url: string>, member_count: int, url: string>> {
+]: any -> oneof<record<asset_tag: string, cluster: record<id: int, name: string, url: string, virtualmachine_count: int>, comments: string, config_context: record, created: string, custom_fields: record, device_role: record<device_count: int, id: int, name: string, slug: string, url: string, virtualmachine_count: int>, device_type: record<device_count: int, display_name: string, id: int, manufacturer: record<devicetype_count: int, id: int, name: string, slug: string, url: string>, model: string, slug: string, url: string>, display_name: string, face: record<label: string, value: string>, id: int, last_updated: string, local_context_data: string, name: string, parent_device: record<display_name: string, id: int, name: string, url: string>, platform: record<device_count: int, id: int, name: string, slug: string, url: string, virtualmachine_count: int>, position: int, primary_ip: record<address: string, family: string, id: int, url: string>, primary_ip4: record<address: string, family: string, id: int, url: string>, primary_ip6: record<address: string, family: string, id: int, url: string>, rack: record<device_count: int, display_name: string, id: int, name: string, url: string>, serial: string, site: record<id: int, name: string, slug: string, url: string>, status: record<label: string, value: string>, tags: list<string>, tenant: record<id: int, name: string, slug: string, url: string>, vc_position: int, vc_priority: int, virtual_chassis: record<id: int, master: record<display_name: string, id: int, name: string, url: string>, member_count: int, url: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4367,7 +4382,6 @@ export def "dcim-devices-partial-update" [
 # PUT /dcim/devices/{id}/
 #
 # operationId: dcim_devices_update
-# --parent_device shape: {name?: string}
 export def "dcim-devices-update" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -4402,7 +4416,7 @@ export def "dcim-devices-update" [
   --vc-position: int # nullable
   --vc-priority: int # nullable
   --virtual-chassis: int # nullable
-]: any -> record<asset_tag: string, cluster: record<id: int, name: string, url: string, virtualmachine_count: int>, comments: string, config_context: record, created: string, custom_fields: record, device_role: record<device_count: int, id: int, name: string, slug: string, url: string, virtualmachine_count: int>, device_type: record<device_count: int, display_name: string, id: int, manufacturer: record<devicetype_count: int, id: int, name: string, slug: string, url: string>, model: string, slug: string, url: string>, display_name: string, face: record<label: string, value: string>, id: int, last_updated: string, local_context_data: string, name: string, parent_device: record<display_name: string, id: int, name: string, url: string>, platform: record<device_count: int, id: int, name: string, slug: string, url: string, virtualmachine_count: int>, position: int, primary_ip: record<address: string, family: string, id: int, url: string>, primary_ip4: record<address: string, family: string, id: int, url: string>, primary_ip6: record<address: string, family: string, id: int, url: string>, rack: record<device_count: int, display_name: string, id: int, name: string, url: string>, serial: string, site: record<id: int, name: string, slug: string, url: string>, status: record<label: string, value: string>, tags: list<string>, tenant: record<id: int, name: string, slug: string, url: string>, vc_position: int, vc_priority: int, virtual_chassis: record<id: int, master: record<display_name: string, id: int, name: string, url: string>, member_count: int, url: string>> {
+]: any -> oneof<record<asset_tag: string, cluster: record<id: int, name: string, url: string, virtualmachine_count: int>, comments: string, config_context: record, created: string, custom_fields: record, device_role: record<device_count: int, id: int, name: string, slug: string, url: string, virtualmachine_count: int>, device_type: record<device_count: int, display_name: string, id: int, manufacturer: record<devicetype_count: int, id: int, name: string, slug: string, url: string>, model: string, slug: string, url: string>, display_name: string, face: record<label: string, value: string>, id: int, last_updated: string, local_context_data: string, name: string, parent_device: record<display_name: string, id: int, name: string, url: string>, platform: record<device_count: int, id: int, name: string, slug: string, url: string, virtualmachine_count: int>, position: int, primary_ip: record<address: string, family: string, id: int, url: string>, primary_ip4: record<address: string, family: string, id: int, url: string>, primary_ip6: record<address: string, family: string, id: int, url: string>, rack: record<device_count: int, display_name: string, id: int, name: string, url: string>, serial: string, site: record<id: int, name: string, slug: string, url: string>, status: record<label: string, value: string>, tags: list<string>, tenant: record<id: int, name: string, slug: string, url: string>, vc_position: int, vc_priority: int, virtual_chassis: record<id: int, master: record<display_name: string, id: int, name: string, url: string>, member_count: int, url: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4441,7 +4455,7 @@ export def "dcim-devices-graphs" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<asset_tag: string, cluster: record<id: int, name: string, url: string, virtualmachine_count: int>, comments: string, config_context: record, created: string, custom_fields: record, device_role: record<device_count: int, id: int, name: string, slug: string, url: string, virtualmachine_count: int>, device_type: record<device_count: int, display_name: string, id: int, manufacturer: record<devicetype_count: int, id: int, name: string, slug: string, url: string>, model: string, slug: string, url: string>, display_name: string, face: record<label: string, value: string>, id: int, last_updated: string, local_context_data: string, name: string, parent_device: record<display_name: string, id: int, name: string, url: string>, platform: record<device_count: int, id: int, name: string, slug: string, url: string, virtualmachine_count: int>, position: int, primary_ip: record<address: string, family: string, id: int, url: string>, primary_ip4: record<address: string, family: string, id: int, url: string>, primary_ip6: record<address: string, family: string, id: int, url: string>, rack: record<device_count: int, display_name: string, id: int, name: string, url: string>, serial: string, site: record<id: int, name: string, slug: string, url: string>, status: record<label: string, value: string>, tags: list<string>, tenant: record<id: int, name: string, slug: string, url: string>, vc_position: int, vc_priority: int, virtual_chassis: record<id: int, master: record<display_name: string, id: int, name: string, url: string>, member_count: int, url: string>> {
+]: nothing -> oneof<record<asset_tag: string, cluster: record<id: int, name: string, url: string, virtualmachine_count: int>, comments: string, config_context: record, created: string, custom_fields: record, device_role: record<device_count: int, id: int, name: string, slug: string, url: string, virtualmachine_count: int>, device_type: record<device_count: int, display_name: string, id: int, manufacturer: record<devicetype_count: int, id: int, name: string, slug: string, url: string>, model: string, slug: string, url: string>, display_name: string, face: record<label: string, value: string>, id: int, last_updated: string, local_context_data: string, name: string, parent_device: record<display_name: string, id: int, name: string, url: string>, platform: record<device_count: int, id: int, name: string, slug: string, url: string, virtualmachine_count: int>, position: int, primary_ip: record<address: string, family: string, id: int, url: string>, primary_ip4: record<address: string, family: string, id: int, url: string>, primary_ip6: record<address: string, family: string, id: int, url: string>, rack: record<device_count: int, display_name: string, id: int, name: string, url: string>, serial: string, site: record<id: int, name: string, slug: string, url: string>, status: record<label: string, value: string>, tags: list<string>, tenant: record<id: int, name: string, slug: string, url: string>, vc_position: int, vc_priority: int, virtual_chassis: record<id: int, master: record<display_name: string, id: int, name: string, url: string>, member_count: int, url: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -4477,11 +4491,12 @@ export def "dcim-devices-napalm" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --method: string
-]: nothing -> record<method: record> {
+  --method: string # required
+]: nothing -> oneof<record<method: record>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($method == null) { error make --unspanned { msg: "required query parameter 'method' missing: pass --method" } }
   let qp = [(serialize-qp "method" $method "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/devices/{id}/napalm/") $qp $auth.query)
   let accept_val = "application/json"
@@ -4537,7 +4552,7 @@ export def "dcim-front-port-templates-list" [
   --devicetype-id-n: string
   --limit: int # Number of results to return per page.
   --offset: int # The initial index from which to return the results.
-]: nothing -> record<count: int, next: string, previous: string, results: table<device_type: record, id: int, name: string, rear_port: record, rear_port_position: int, type: record>> {
+]: nothing -> oneof<record<count: int, next: string, previous: string, results: table<device_type: record, id: int, name: string, rear_port: record, rear_port_position: int, type: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "devicetype_id" $devicetype_id "scalar") (serialize-qp "id__n" $id_n "scalar") (serialize-qp "id__lte" $id_lte "scalar") (serialize-qp "id__lt" $id_lt "scalar") (serialize-qp "id__gte" $id_gte "scalar") (serialize-qp "id__gt" $id_gt "scalar") (serialize-qp "name__n" $name_n "scalar") (serialize-qp "name__ic" $name_ic "scalar") (serialize-qp "name__nic" $name_nic "scalar") (serialize-qp "name__iew" $name_iew "scalar") (serialize-qp "name__niew" $name_niew "scalar") (serialize-qp "name__isw" $name_isw "scalar") (serialize-qp "name__nisw" $name_nisw "scalar") (serialize-qp "name__ie" $name_ie "scalar") (serialize-qp "name__nie" $name_nie "scalar") (serialize-qp "type__n" $type_n "scalar") (serialize-qp "devicetype_id__n" $devicetype_id_n "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
@@ -4576,7 +4591,7 @@ export def "dcim-front-port-templates-create" [
   rear_port: int
   --rear-port-position: int # default: 1
   type: string@type-completer-2
-]: any -> record<device_type: record<device_count: int, display_name: string, id: int, manufacturer: record<devicetype_count: int, id: int, name: string, slug: string, url: string>, model: string, slug: string, url: string>, id: int, name: string, rear_port: record<id: int, name: string, url: string>, rear_port_position: int, type: record<label: string, value: string>> {
+]: any -> oneof<record<device_type: record<device_count: int, display_name: string, id: int, manufacturer: record<devicetype_count: int, id: int, name: string, slug: string, url: string>, model: string, slug: string, url: string>, id: int, name: string, rear_port: record<id: int, name: string, url: string>, rear_port_position: int, type: record<label: string, value: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4649,7 +4664,7 @@ export def "dcim-front-port-templates-read" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<device_type: record<device_count: int, display_name: string, id: int, manufacturer: record<devicetype_count: int, id: int, name: string, slug: string, url: string>, model: string, slug: string, url: string>, id: int, name: string, rear_port: record<id: int, name: string, url: string>, rear_port_position: int, type: record<label: string, value: string>> {
+]: nothing -> oneof<record<device_type: record<device_count: int, display_name: string, id: int, manufacturer: record<devicetype_count: int, id: int, name: string, slug: string, url: string>, model: string, slug: string, url: string>, id: int, name: string, rear_port: record<id: int, name: string, url: string>, rear_port_position: int, type: record<label: string, value: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -4689,7 +4704,7 @@ export def "dcim-front-port-templates-partial-update" [
   rear_port: int
   --rear-port-position: int # default: 1
   type: string@type-completer-2
-]: any -> record<device_type: record<device_count: int, display_name: string, id: int, manufacturer: record<devicetype_count: int, id: int, name: string, slug: string, url: string>, model: string, slug: string, url: string>, id: int, name: string, rear_port: record<id: int, name: string, url: string>, rear_port_position: int, type: record<label: string, value: string>> {
+]: any -> oneof<record<device_type: record<device_count: int, display_name: string, id: int, manufacturer: record<devicetype_count: int, id: int, name: string, slug: string, url: string>, model: string, slug: string, url: string>, id: int, name: string, rear_port: record<id: int, name: string, url: string>, rear_port_position: int, type: record<label: string, value: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4732,7 +4747,7 @@ export def "dcim-front-port-templates-update" [
   rear_port: int
   --rear-port-position: int # default: 1
   type: string@type-completer-2
-]: any -> record<device_type: record<device_count: int, display_name: string, id: int, manufacturer: record<devicetype_count: int, id: int, name: string, slug: string, url: string>, model: string, slug: string, url: string>, id: int, name: string, rear_port: record<id: int, name: string, url: string>, rear_port_position: int, type: record<label: string, value: string>> {
+]: any -> oneof<record<device_type: record<device_count: int, display_name: string, id: int, manufacturer: record<devicetype_count: int, id: int, name: string, slug: string, url: string>, model: string, slug: string, url: string>, id: int, name: string, rear_port: record<id: int, name: string, url: string>, rear_port_position: int, type: record<label: string, value: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4816,7 +4831,7 @@ export def "dcim-front-ports-list" [
   --tag-n: string
   --limit: int # Number of results to return per page.
   --offset: int # The initial index from which to return the results.
-]: nothing -> record<count: int, next: string, previous: string, results: table<cable: record, description: string, device: record, id: int, name: string, rear_port: record, rear_port_position: int, tags: list, type: record>> {
+]: nothing -> oneof<record<count: int, next: string, previous: string, results: table<cable: record, description: string, device: record, id: int, name: string, rear_port: record, rear_port_position: int, tags: list, type: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "region_id" $region_id "scalar") (serialize-qp "region" $region "scalar") (serialize-qp "site_id" $site_id "scalar") (serialize-qp "site" $site "scalar") (serialize-qp "device_id" $device_id "scalar") (serialize-qp "device" $device "scalar") (serialize-qp "tag" $tag "scalar") (serialize-qp "cabled" $cabled "scalar") (serialize-qp "id__n" $id_n "scalar") (serialize-qp "id__lte" $id_lte "scalar") (serialize-qp "id__lt" $id_lt "scalar") (serialize-qp "id__gte" $id_gte "scalar") (serialize-qp "id__gt" $id_gt "scalar") (serialize-qp "name__n" $name_n "scalar") (serialize-qp "name__ic" $name_ic "scalar") (serialize-qp "name__nic" $name_nic "scalar") (serialize-qp "name__iew" $name_iew "scalar") (serialize-qp "name__niew" $name_niew "scalar") (serialize-qp "name__isw" $name_isw "scalar") (serialize-qp "name__nisw" $name_nisw "scalar") (serialize-qp "name__ie" $name_ie "scalar") (serialize-qp "name__nie" $name_nie "scalar") (serialize-qp "type__n" $type_n "scalar") (serialize-qp "description__n" $description_n "scalar") (serialize-qp "description__ic" $description_ic "scalar") (serialize-qp "description__nic" $description_nic "scalar") (serialize-qp "description__iew" $description_iew "scalar") (serialize-qp "description__niew" $description_niew "scalar") (serialize-qp "description__isw" $description_isw "scalar") (serialize-qp "description__nisw" $description_nisw "scalar") (serialize-qp "description__ie" $description_ie "scalar") (serialize-qp "description__nie" $description_nie "scalar") (serialize-qp "region_id__n" $region_id_n "scalar") (serialize-qp "region__n" $region_n "scalar") (serialize-qp "site_id__n" $site_id_n "scalar") (serialize-qp "site__n" $site_n "scalar") (serialize-qp "device_id__n" $device_id_n "scalar") (serialize-qp "device__n" $device_n "scalar") (serialize-qp "tag__n" $tag_n "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
@@ -4840,7 +4855,6 @@ export def "dcim-front-ports-list" [
 # POST /dcim/front-ports/
 #
 # operationId: dcim_front-ports_create
-# --cable shape: {label?: string}
 export def "dcim-front-ports-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4859,7 +4873,7 @@ export def "dcim-front-ports-create" [
   --rear-port-position: int # default: 1
   --tags: list<string>
   type: string@type-completer-2
-]: any -> record<cable: record<id: int, label: string, url: string>, description: string, device: record<display_name: string, id: int, name: string, url: string>, id: int, name: string, rear_port: record<id: int, name: string, url: string>, rear_port_position: int, tags: list<string>, type: record<label: string, value: string>> {
+]: any -> oneof<record<cable: record<id: int, label: string, url: string>, description: string, device: record<display_name: string, id: int, name: string, url: string>, id: int, name: string, rear_port: record<id: int, name: string, url: string>, rear_port_position: int, tags: list<string>, type: record<label: string, value: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4932,7 +4946,7 @@ export def "dcim-front-ports-read" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<cable: record<id: int, label: string, url: string>, description: string, device: record<display_name: string, id: int, name: string, url: string>, id: int, name: string, rear_port: record<id: int, name: string, url: string>, rear_port_position: int, tags: list<string>, type: record<label: string, value: string>> {
+]: nothing -> oneof<record<cable: record<id: int, label: string, url: string>, description: string, device: record<display_name: string, id: int, name: string, url: string>, id: int, name: string, rear_port: record<id: int, name: string, url: string>, rear_port_position: int, tags: list<string>, type: record<label: string, value: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -4956,7 +4970,6 @@ export def "dcim-front-ports-read" [
 # PATCH /dcim/front-ports/{id}/
 #
 # operationId: dcim_front-ports_partial_update
-# --cable shape: {label?: string}
 export def "dcim-front-ports-partial-update" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -4976,7 +4989,7 @@ export def "dcim-front-ports-partial-update" [
   --rear-port-position: int # default: 1
   --tags: list<string>
   type: string@type-completer-2
-]: any -> record<cable: record<id: int, label: string, url: string>, description: string, device: record<display_name: string, id: int, name: string, url: string>, id: int, name: string, rear_port: record<id: int, name: string, url: string>, rear_port_position: int, tags: list<string>, type: record<label: string, value: string>> {
+]: any -> oneof<record<cable: record<id: int, label: string, url: string>, description: string, device: record<display_name: string, id: int, name: string, url: string>, id: int, name: string, rear_port: record<id: int, name: string, url: string>, rear_port_position: int, tags: list<string>, type: record<label: string, value: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5003,7 +5016,6 @@ export def "dcim-front-ports-partial-update" [
 # PUT /dcim/front-ports/{id}/
 #
 # operationId: dcim_front-ports_update
-# --cable shape: {label?: string}
 export def "dcim-front-ports-update" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -5023,7 +5035,7 @@ export def "dcim-front-ports-update" [
   --rear-port-position: int # default: 1
   --tags: list<string>
   type: string@type-completer-2
-]: any -> record<cable: record<id: int, label: string, url: string>, description: string, device: record<display_name: string, id: int, name: string, url: string>, id: int, name: string, rear_port: record<id: int, name: string, url: string>, rear_port_position: int, tags: list<string>, type: record<label: string, value: string>> {
+]: any -> oneof<record<cable: record<id: int, label: string, url: string>, description: string, device: record<display_name: string, id: int, name: string, url: string>, id: int, name: string, rear_port: record<id: int, name: string, url: string>, rear_port_position: int, tags: list<string>, type: record<label: string, value: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5062,7 +5074,7 @@ export def "dcim-front-ports-trace" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<cable: record<id: int, label: string, url: string>, description: string, device: record<display_name: string, id: int, name: string, url: string>, id: int, name: string, rear_port: record<id: int, name: string, url: string>, rear_port_position: int, tags: list<string>, type: record<label: string, value: string>> {
+]: nothing -> oneof<record<cable: record<id: int, label: string, url: string>, description: string, device: record<display_name: string, id: int, name: string, url: string>, id: int, name: string, rear_port: record<id: int, name: string, url: string>, rear_port_position: int, tags: list<string>, type: record<label: string, value: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -5103,7 +5115,7 @@ export def "dcim-interface-connections-list" [
   --connection-status-n: string
   --limit: int # Number of results to return per page.
   --offset: int # The initial index from which to return the results.
-]: nothing -> record<count: int, next: string, previous: string, results: table<connection_status: record, interface_a: record, interface_b: record>> {
+]: nothing -> oneof<record<count: int, next: string, previous: string, results: table<connection_status: record, interface_a: record, interface_b: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "connection_status" $connection_status "scalar") (serialize-qp "site" $site "scalar") (serialize-qp "device_id" $device_id "scalar") (serialize-qp "device" $device "scalar") (serialize-qp "connection_status__n" $connection_status_n "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
@@ -5162,7 +5174,7 @@ export def "dcim-interface-templates-list" [
   --devicetype-id-n: string
   --limit: int # Number of results to return per page.
   --offset: int # The initial index from which to return the results.
-]: nothing -> record<count: int, next: string, previous: string, results: table<device_type: record, id: int, mgmt_only: bool, name: string, type: record>> {
+]: nothing -> oneof<record<count: int, next: string, previous: string, results: table<device_type: record, id: int, mgmt_only: bool, name: string, type: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "mgmt_only" $mgmt_only "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "devicetype_id" $devicetype_id "scalar") (serialize-qp "id__n" $id_n "scalar") (serialize-qp "id__lte" $id_lte "scalar") (serialize-qp "id__lt" $id_lt "scalar") (serialize-qp "id__gte" $id_gte "scalar") (serialize-qp "id__gt" $id_gt "scalar") (serialize-qp "name__n" $name_n "scalar") (serialize-qp "name__ic" $name_ic "scalar") (serialize-qp "name__nic" $name_nic "scalar") (serialize-qp "name__iew" $name_iew "scalar") (serialize-qp "name__niew" $name_niew "scalar") (serialize-qp "name__isw" $name_isw "scalar") (serialize-qp "name__nisw" $name_nisw "scalar") (serialize-qp "name__ie" $name_ie "scalar") (serialize-qp "name__nie" $name_nie "scalar") (serialize-qp "type__n" $type_n "scalar") (serialize-qp "devicetype_id__n" $devicetype_id_n "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
@@ -5200,7 +5212,7 @@ export def "dcim-interface-templates-create" [
   --mgmt-only: oneof<nothing, bool>
   name: string
   type: string@type-completer-3
-]: any -> record<device_type: record<device_count: int, display_name: string, id: int, manufacturer: record<devicetype_count: int, id: int, name: string, slug: string, url: string>, model: string, slug: string, url: string>, id: int, mgmt_only: bool, name: string, type: record<label: string, value: string>> {
+]: any -> oneof<record<device_type: record<device_count: int, display_name: string, id: int, manufacturer: record<devicetype_count: int, id: int, name: string, slug: string, url: string>, model: string, slug: string, url: string>, id: int, mgmt_only: bool, name: string, type: record<label: string, value: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5273,7 +5285,7 @@ export def "dcim-interface-templates-read" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<device_type: record<device_count: int, display_name: string, id: int, manufacturer: record<devicetype_count: int, id: int, name: string, slug: string, url: string>, model: string, slug: string, url: string>, id: int, mgmt_only: bool, name: string, type: record<label: string, value: string>> {
+]: nothing -> oneof<record<device_type: record<device_count: int, display_name: string, id: int, manufacturer: record<devicetype_count: int, id: int, name: string, slug: string, url: string>, model: string, slug: string, url: string>, id: int, mgmt_only: bool, name: string, type: record<label: string, value: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -5312,7 +5324,7 @@ export def "dcim-interface-templates-partial-update" [
   --mgmt-only: oneof<nothing, bool>
   name: string
   type: string@type-completer-3
-]: any -> record<device_type: record<device_count: int, display_name: string, id: int, manufacturer: record<devicetype_count: int, id: int, name: string, slug: string, url: string>, model: string, slug: string, url: string>, id: int, mgmt_only: bool, name: string, type: record<label: string, value: string>> {
+]: any -> oneof<record<device_type: record<device_count: int, display_name: string, id: int, manufacturer: record<devicetype_count: int, id: int, name: string, slug: string, url: string>, model: string, slug: string, url: string>, id: int, mgmt_only: bool, name: string, type: record<label: string, value: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5354,7 +5366,7 @@ export def "dcim-interface-templates-update" [
   --mgmt-only: oneof<nothing, bool>
   name: string
   type: string@type-completer-3
-]: any -> record<device_type: record<device_count: int, display_name: string, id: int, manufacturer: record<devicetype_count: int, id: int, name: string, slug: string, url: string>, model: string, slug: string, url: string>, id: int, mgmt_only: bool, name: string, type: record<label: string, value: string>> {
+]: any -> oneof<record<device_type: record<device_count: int, display_name: string, id: int, manufacturer: record<devicetype_count: int, id: int, name: string, slug: string, url: string>, model: string, slug: string, url: string>, id: int, mgmt_only: bool, name: string, type: record<label: string, value: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5463,7 +5475,7 @@ export def "dcim-interfaces-list" [
   --mac-address-nie: string
   --limit: int # Number of results to return per page.
   --offset: int # The initial index from which to return the results.
-]: nothing -> record<count: int, next: string, previous: string, results: table<cable: record, connected_endpoint: record, connected_endpoint_type: string, connection_status: record, count_ipaddresses: int, description: string, device: record, enabled: bool, id: int, lag: record, mac_address: string, mgmt_only: bool, mode: record, mtu: int, name: string, tagged_vlans: list, tags: list, type: record, untagged_vlan: record>> {
+]: nothing -> oneof<record<count: int, next: string, previous: string, results: table<cable: record, connected_endpoint: record, connected_endpoint_type: string, connection_status: record, count_ipaddresses: int, description: string, device: record, enabled: bool, id: int, lag: record, mac_address: string, mgmt_only: bool, mode: record, mtu: int, name: string, tagged_vlans: list, tags: list, type: record, untagged_vlan: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "connection_status" $connection_status "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "enabled" $enabled "scalar") (serialize-qp "mtu" $mtu "scalar") (serialize-qp "mgmt_only" $mgmt_only "scalar") (serialize-qp "mode" $mode "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "region_id" $region_id "scalar") (serialize-qp "region" $region "scalar") (serialize-qp "site_id" $site_id "scalar") (serialize-qp "site" $site "scalar") (serialize-qp "device_id" $device_id "scalar") (serialize-qp "device" $device "scalar") (serialize-qp "tag" $tag "scalar") (serialize-qp "cabled" $cabled "scalar") (serialize-qp "kind" $kind "scalar") (serialize-qp "lag_id" $lag_id "scalar") (serialize-qp "mac_address" $mac_address "scalar") (serialize-qp "vlan_id" $vlan_id "scalar") (serialize-qp "vlan" $vlan "scalar") (serialize-qp "id__n" $id_n "scalar") (serialize-qp "id__lte" $id_lte "scalar") (serialize-qp "id__lt" $id_lt "scalar") (serialize-qp "id__gte" $id_gte "scalar") (serialize-qp "id__gt" $id_gt "scalar") (serialize-qp "name__n" $name_n "scalar") (serialize-qp "name__ic" $name_ic "scalar") (serialize-qp "name__nic" $name_nic "scalar") (serialize-qp "name__iew" $name_iew "scalar") (serialize-qp "name__niew" $name_niew "scalar") (serialize-qp "name__isw" $name_isw "scalar") (serialize-qp "name__nisw" $name_nisw "scalar") (serialize-qp "name__ie" $name_ie "scalar") (serialize-qp "name__nie" $name_nie "scalar") (serialize-qp "connection_status__n" $connection_status_n "scalar") (serialize-qp "type__n" $type_n "scalar") (serialize-qp "mtu__n" $mtu_n "scalar") (serialize-qp "mtu__lte" $mtu_lte "scalar") (serialize-qp "mtu__lt" $mtu_lt "scalar") (serialize-qp "mtu__gte" $mtu_gte "scalar") (serialize-qp "mtu__gt" $mtu_gt "scalar") (serialize-qp "mode__n" $mode_n "scalar") (serialize-qp "description__n" $description_n "scalar") (serialize-qp "description__ic" $description_ic "scalar") (serialize-qp "description__nic" $description_nic "scalar") (serialize-qp "description__iew" $description_iew "scalar") (serialize-qp "description__niew" $description_niew "scalar") (serialize-qp "description__isw" $description_isw "scalar") (serialize-qp "description__nisw" $description_nisw "scalar") (serialize-qp "description__ie" $description_ie "scalar") (serialize-qp "description__nie" $description_nie "scalar") (serialize-qp "region_id__n" $region_id_n "scalar") (serialize-qp "region__n" $region_n "scalar") (serialize-qp "site_id__n" $site_id_n "scalar") (serialize-qp "site__n" $site_n "scalar") (serialize-qp "tag__n" $tag_n "scalar") (serialize-qp "lag_id__n" $lag_id_n "scalar") (serialize-qp "mac_address__n" $mac_address_n "scalar") (serialize-qp "mac_address__ic" $mac_address_ic "scalar") (serialize-qp "mac_address__nic" $mac_address_nic "scalar") (serialize-qp "mac_address__iew" $mac_address_iew "scalar") (serialize-qp "mac_address__niew" $mac_address_niew "scalar") (serialize-qp "mac_address__isw" $mac_address_isw "scalar") (serialize-qp "mac_address__nisw" $mac_address_nisw "scalar") (serialize-qp "mac_address__ie" $mac_address_ie "scalar") (serialize-qp "mac_address__nie" $mac_address_nie "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
@@ -5487,7 +5499,6 @@ export def "dcim-interfaces-list" [
 # POST /dcim/interfaces/
 #
 # operationId: dcim_interfaces_create
-# --cable shape: {label?: string}
 export def "dcim-interfaces-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5513,7 +5524,7 @@ export def "dcim-interfaces-create" [
   --tags: list<string>
   type: string@type-completer-3
   --untagged-vlan: int # nullable
-]: any -> record<cable: record<id: int, label: string, url: string>, connected_endpoint: record, connected_endpoint_type: string, connection_status: record<label: string, value: bool>, count_ipaddresses: int, description: string, device: record<display_name: string, id: int, name: string, url: string>, enabled: bool, id: int, lag: record<cable: int, connection_status: record<label: string, value: bool>, device: record<display_name: string, id: int, name: string, url: string>, id: int, name: string, url: string>, mac_address: string, mgmt_only: bool, mode: record<label: string, value: string>, mtu: int, name: string, tagged_vlans: table<display_name: string, id: int, name: string, url: string, vid: int>, tags: list<string>, type: record<label: string, value: string>, untagged_vlan: record<display_name: string, id: int, name: string, url: string, vid: int>> {
+]: any -> oneof<record<cable: record<id: int, label: string, url: string>, connected_endpoint: record, connected_endpoint_type: string, connection_status: record<label: string, value: bool>, count_ipaddresses: int, description: string, device: record<display_name: string, id: int, name: string, url: string>, enabled: bool, id: int, lag: record<cable: int, connection_status: record<label: string, value: bool>, device: record<display_name: string, id: int, name: string, url: string>, id: int, name: string, url: string>, mac_address: string, mgmt_only: bool, mode: record<label: string, value: string>, mtu: int, name: string, tagged_vlans: table<display_name: string, id: int, name: string, url: string, vid: int>, tags: list<string>, type: record<label: string, value: string>, untagged_vlan: record<display_name: string, id: int, name: string, url: string, vid: int>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5586,7 +5597,7 @@ export def "dcim-interfaces-read" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<cable: record<id: int, label: string, url: string>, connected_endpoint: record, connected_endpoint_type: string, connection_status: record<label: string, value: bool>, count_ipaddresses: int, description: string, device: record<display_name: string, id: int, name: string, url: string>, enabled: bool, id: int, lag: record<cable: int, connection_status: record<label: string, value: bool>, device: record<display_name: string, id: int, name: string, url: string>, id: int, name: string, url: string>, mac_address: string, mgmt_only: bool, mode: record<label: string, value: string>, mtu: int, name: string, tagged_vlans: table<display_name: string, id: int, name: string, url: string, vid: int>, tags: list<string>, type: record<label: string, value: string>, untagged_vlan: record<display_name: string, id: int, name: string, url: string, vid: int>> {
+]: nothing -> oneof<record<cable: record<id: int, label: string, url: string>, connected_endpoint: record, connected_endpoint_type: string, connection_status: record<label: string, value: bool>, count_ipaddresses: int, description: string, device: record<display_name: string, id: int, name: string, url: string>, enabled: bool, id: int, lag: record<cable: int, connection_status: record<label: string, value: bool>, device: record<display_name: string, id: int, name: string, url: string>, id: int, name: string, url: string>, mac_address: string, mgmt_only: bool, mode: record<label: string, value: string>, mtu: int, name: string, tagged_vlans: table<display_name: string, id: int, name: string, url: string, vid: int>, tags: list<string>, type: record<label: string, value: string>, untagged_vlan: record<display_name: string, id: int, name: string, url: string, vid: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -5610,7 +5621,6 @@ export def "dcim-interfaces-read" [
 # PATCH /dcim/interfaces/{id}/
 #
 # operationId: dcim_interfaces_partial_update
-# --cable shape: {label?: string}
 export def "dcim-interfaces-partial-update" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -5637,7 +5647,7 @@ export def "dcim-interfaces-partial-update" [
   --tags: list<string>
   type: string@type-completer-3
   --untagged-vlan: int # nullable
-]: any -> record<cable: record<id: int, label: string, url: string>, connected_endpoint: record, connected_endpoint_type: string, connection_status: record<label: string, value: bool>, count_ipaddresses: int, description: string, device: record<display_name: string, id: int, name: string, url: string>, enabled: bool, id: int, lag: record<cable: int, connection_status: record<label: string, value: bool>, device: record<display_name: string, id: int, name: string, url: string>, id: int, name: string, url: string>, mac_address: string, mgmt_only: bool, mode: record<label: string, value: string>, mtu: int, name: string, tagged_vlans: table<display_name: string, id: int, name: string, url: string, vid: int>, tags: list<string>, type: record<label: string, value: string>, untagged_vlan: record<display_name: string, id: int, name: string, url: string, vid: int>> {
+]: any -> oneof<record<cable: record<id: int, label: string, url: string>, connected_endpoint: record, connected_endpoint_type: string, connection_status: record<label: string, value: bool>, count_ipaddresses: int, description: string, device: record<display_name: string, id: int, name: string, url: string>, enabled: bool, id: int, lag: record<cable: int, connection_status: record<label: string, value: bool>, device: record<display_name: string, id: int, name: string, url: string>, id: int, name: string, url: string>, mac_address: string, mgmt_only: bool, mode: record<label: string, value: string>, mtu: int, name: string, tagged_vlans: table<display_name: string, id: int, name: string, url: string, vid: int>, tags: list<string>, type: record<label: string, value: string>, untagged_vlan: record<display_name: string, id: int, name: string, url: string, vid: int>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5664,7 +5674,6 @@ export def "dcim-interfaces-partial-update" [
 # PUT /dcim/interfaces/{id}/
 #
 # operationId: dcim_interfaces_update
-# --cable shape: {label?: string}
 export def "dcim-interfaces-update" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -5691,7 +5700,7 @@ export def "dcim-interfaces-update" [
   --tags: list<string>
   type: string@type-completer-3
   --untagged-vlan: int # nullable
-]: any -> record<cable: record<id: int, label: string, url: string>, connected_endpoint: record, connected_endpoint_type: string, connection_status: record<label: string, value: bool>, count_ipaddresses: int, description: string, device: record<display_name: string, id: int, name: string, url: string>, enabled: bool, id: int, lag: record<cable: int, connection_status: record<label: string, value: bool>, device: record<display_name: string, id: int, name: string, url: string>, id: int, name: string, url: string>, mac_address: string, mgmt_only: bool, mode: record<label: string, value: string>, mtu: int, name: string, tagged_vlans: table<display_name: string, id: int, name: string, url: string, vid: int>, tags: list<string>, type: record<label: string, value: string>, untagged_vlan: record<display_name: string, id: int, name: string, url: string, vid: int>> {
+]: any -> oneof<record<cable: record<id: int, label: string, url: string>, connected_endpoint: record, connected_endpoint_type: string, connection_status: record<label: string, value: bool>, count_ipaddresses: int, description: string, device: record<display_name: string, id: int, name: string, url: string>, enabled: bool, id: int, lag: record<cable: int, connection_status: record<label: string, value: bool>, device: record<display_name: string, id: int, name: string, url: string>, id: int, name: string, url: string>, mac_address: string, mgmt_only: bool, mode: record<label: string, value: string>, mtu: int, name: string, tagged_vlans: table<display_name: string, id: int, name: string, url: string, vid: int>, tags: list<string>, type: record<label: string, value: string>, untagged_vlan: record<display_name: string, id: int, name: string, url: string, vid: int>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5730,7 +5739,7 @@ export def "dcim-interfaces-graphs" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<cable: record<id: int, label: string, url: string>, connected_endpoint: record, connected_endpoint_type: string, connection_status: record<label: string, value: bool>, count_ipaddresses: int, description: string, device: record<display_name: string, id: int, name: string, url: string>, enabled: bool, id: int, lag: record<cable: int, connection_status: record<label: string, value: bool>, device: record<display_name: string, id: int, name: string, url: string>, id: int, name: string, url: string>, mac_address: string, mgmt_only: bool, mode: record<label: string, value: string>, mtu: int, name: string, tagged_vlans: table<display_name: string, id: int, name: string, url: string, vid: int>, tags: list<string>, type: record<label: string, value: string>, untagged_vlan: record<display_name: string, id: int, name: string, url: string, vid: int>> {
+]: nothing -> oneof<record<cable: record<id: int, label: string, url: string>, connected_endpoint: record, connected_endpoint_type: string, connection_status: record<label: string, value: bool>, count_ipaddresses: int, description: string, device: record<display_name: string, id: int, name: string, url: string>, enabled: bool, id: int, lag: record<cable: int, connection_status: record<label: string, value: bool>, device: record<display_name: string, id: int, name: string, url: string>, id: int, name: string, url: string>, mac_address: string, mgmt_only: bool, mode: record<label: string, value: string>, mtu: int, name: string, tagged_vlans: table<display_name: string, id: int, name: string, url: string, vid: int>, tags: list<string>, type: record<label: string, value: string>, untagged_vlan: record<display_name: string, id: int, name: string, url: string, vid: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -5766,7 +5775,7 @@ export def "dcim-interfaces-trace" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<cable: record<id: int, label: string, url: string>, connected_endpoint: record, connected_endpoint_type: string, connection_status: record<label: string, value: bool>, count_ipaddresses: int, description: string, device: record<display_name: string, id: int, name: string, url: string>, enabled: bool, id: int, lag: record<cable: int, connection_status: record<label: string, value: bool>, device: record<display_name: string, id: int, name: string, url: string>, id: int, name: string, url: string>, mac_address: string, mgmt_only: bool, mode: record<label: string, value: string>, mtu: int, name: string, tagged_vlans: table<display_name: string, id: int, name: string, url: string, vid: int>, tags: list<string>, type: record<label: string, value: string>, untagged_vlan: record<display_name: string, id: int, name: string, url: string, vid: int>> {
+]: nothing -> oneof<record<cable: record<id: int, label: string, url: string>, connected_endpoint: record, connected_endpoint_type: string, connection_status: record<label: string, value: bool>, count_ipaddresses: int, description: string, device: record<display_name: string, id: int, name: string, url: string>, enabled: bool, id: int, lag: record<cable: int, connection_status: record<label: string, value: bool>, device: record<display_name: string, id: int, name: string, url: string>, id: int, name: string, url: string>, mac_address: string, mgmt_only: bool, mode: record<label: string, value: string>, mtu: int, name: string, tagged_vlans: table<display_name: string, id: int, name: string, url: string, vid: int>, tags: list<string>, type: record<label: string, value: string>, untagged_vlan: record<display_name: string, id: int, name: string, url: string, vid: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -5862,7 +5871,7 @@ export def "dcim-inventory-items-list" [
   --manufacturer-n: string
   --limit: int # Number of results to return per page.
   --offset: int # The initial index from which to return the results.
-]: nothing -> record<count: int, next: string, previous: string, results: table<asset_tag: string, description: string, device: record, discovered: bool, id: int, manufacturer: record, name: string, parent: int, part_id: string, serial: string, tags: list>> {
+]: nothing -> oneof<record<count: int, next: string, previous: string, results: table<asset_tag: string, description: string, device: record, discovered: bool, id: int, manufacturer: record, name: string, parent: int, part_id: string, serial: string, tags: list>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "part_id" $part_id "scalar") (serialize-qp "asset_tag" $asset_tag "scalar") (serialize-qp "discovered" $discovered "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "region_id" $region_id "scalar") (serialize-qp "region" $region "scalar") (serialize-qp "site_id" $site_id "scalar") (serialize-qp "site" $site "scalar") (serialize-qp "device_id" $device_id "scalar") (serialize-qp "device" $device "scalar") (serialize-qp "tag" $tag "scalar") (serialize-qp "parent_id" $parent_id "scalar") (serialize-qp "manufacturer_id" $manufacturer_id "scalar") (serialize-qp "manufacturer" $manufacturer "scalar") (serialize-qp "serial" $serial "scalar") (serialize-qp "id__n" $id_n "scalar") (serialize-qp "id__lte" $id_lte "scalar") (serialize-qp "id__lt" $id_lt "scalar") (serialize-qp "id__gte" $id_gte "scalar") (serialize-qp "id__gt" $id_gt "scalar") (serialize-qp "name__n" $name_n "scalar") (serialize-qp "name__ic" $name_ic "scalar") (serialize-qp "name__nic" $name_nic "scalar") (serialize-qp "name__iew" $name_iew "scalar") (serialize-qp "name__niew" $name_niew "scalar") (serialize-qp "name__isw" $name_isw "scalar") (serialize-qp "name__nisw" $name_nisw "scalar") (serialize-qp "name__ie" $name_ie "scalar") (serialize-qp "name__nie" $name_nie "scalar") (serialize-qp "part_id__n" $part_id_n "scalar") (serialize-qp "part_id__ic" $part_id_ic "scalar") (serialize-qp "part_id__nic" $part_id_nic "scalar") (serialize-qp "part_id__iew" $part_id_iew "scalar") (serialize-qp "part_id__niew" $part_id_niew "scalar") (serialize-qp "part_id__isw" $part_id_isw "scalar") (serialize-qp "part_id__nisw" $part_id_nisw "scalar") (serialize-qp "part_id__ie" $part_id_ie "scalar") (serialize-qp "part_id__nie" $part_id_nie "scalar") (serialize-qp "asset_tag__n" $asset_tag_n "scalar") (serialize-qp "asset_tag__ic" $asset_tag_ic "scalar") (serialize-qp "asset_tag__nic" $asset_tag_nic "scalar") (serialize-qp "asset_tag__iew" $asset_tag_iew "scalar") (serialize-qp "asset_tag__niew" $asset_tag_niew "scalar") (serialize-qp "asset_tag__isw" $asset_tag_isw "scalar") (serialize-qp "asset_tag__nisw" $asset_tag_nisw "scalar") (serialize-qp "asset_tag__ie" $asset_tag_ie "scalar") (serialize-qp "asset_tag__nie" $asset_tag_nie "scalar") (serialize-qp "region_id__n" $region_id_n "scalar") (serialize-qp "region__n" $region_n "scalar") (serialize-qp "site_id__n" $site_id_n "scalar") (serialize-qp "site__n" $site_n "scalar") (serialize-qp "device_id__n" $device_id_n "scalar") (serialize-qp "device__n" $device_n "scalar") (serialize-qp "tag__n" $tag_n "scalar") (serialize-qp "parent_id__n" $parent_id_n "scalar") (serialize-qp "manufacturer_id__n" $manufacturer_id_n "scalar") (serialize-qp "manufacturer__n" $manufacturer_n "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
@@ -5906,7 +5915,7 @@ export def "dcim-inventory-items-create" [
   --part-id: string # Manufacturer-assigned part identifier
   --serial: string
   --tags: list<string>
-]: any -> record<asset_tag: string, description: string, device: record<display_name: string, id: int, name: string, url: string>, discovered: bool, id: int, manufacturer: record<devicetype_count: int, id: int, name: string, slug: string, url: string>, name: string, parent: int, part_id: string, serial: string, tags: list<string>> {
+]: any -> oneof<record<asset_tag: string, description: string, device: record<display_name: string, id: int, name: string, url: string>, discovered: bool, id: int, manufacturer: record<devicetype_count: int, id: int, name: string, slug: string, url: string>, name: string, parent: int, part_id: string, serial: string, tags: list<string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5979,7 +5988,7 @@ export def "dcim-inventory-items-read" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<asset_tag: string, description: string, device: record<display_name: string, id: int, name: string, url: string>, discovered: bool, id: int, manufacturer: record<devicetype_count: int, id: int, name: string, slug: string, url: string>, name: string, parent: int, part_id: string, serial: string, tags: list<string>> {
+]: nothing -> oneof<record<asset_tag: string, description: string, device: record<display_name: string, id: int, name: string, url: string>, discovered: bool, id: int, manufacturer: record<devicetype_count: int, id: int, name: string, slug: string, url: string>, name: string, parent: int, part_id: string, serial: string, tags: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -6024,7 +6033,7 @@ export def "dcim-inventory-items-partial-update" [
   --part-id: string # Manufacturer-assigned part identifier
   --serial: string
   --tags: list<string>
-]: any -> record<asset_tag: string, description: string, device: record<display_name: string, id: int, name: string, url: string>, discovered: bool, id: int, manufacturer: record<devicetype_count: int, id: int, name: string, slug: string, url: string>, name: string, parent: int, part_id: string, serial: string, tags: list<string>> {
+]: any -> oneof<record<asset_tag: string, description: string, device: record<display_name: string, id: int, name: string, url: string>, discovered: bool, id: int, manufacturer: record<devicetype_count: int, id: int, name: string, slug: string, url: string>, name: string, parent: int, part_id: string, serial: string, tags: list<string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6072,7 +6081,7 @@ export def "dcim-inventory-items-update" [
   --part-id: string # Manufacturer-assigned part identifier
   --serial: string
   --tags: list<string>
-]: any -> record<asset_tag: string, description: string, device: record<display_name: string, id: int, name: string, url: string>, discovered: bool, id: int, manufacturer: record<devicetype_count: int, id: int, name: string, slug: string, url: string>, name: string, parent: int, part_id: string, serial: string, tags: list<string>> {
+]: any -> oneof<record<asset_tag: string, description: string, device: record<display_name: string, id: int, name: string, url: string>, discovered: bool, id: int, manufacturer: record<devicetype_count: int, id: int, name: string, slug: string, url: string>, name: string, parent: int, part_id: string, serial: string, tags: list<string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6149,7 +6158,7 @@ export def "dcim-manufacturers-list" [
   --description-nie: string
   --limit: int # Number of results to return per page.
   --offset: int # The initial index from which to return the results.
-]: nothing -> record<count: int, next: string, previous: string, results: table<description: string, devicetype_count: int, id: int, inventoryitem_count: int, name: string, platform_count: int, slug: string>> {
+]: nothing -> oneof<record<count: int, next: string, previous: string, results: table<description: string, devicetype_count: int, id: int, inventoryitem_count: int, name: string, platform_count: int, slug: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "slug" $slug "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "id__n" $id_n "scalar") (serialize-qp "id__lte" $id_lte "scalar") (serialize-qp "id__lt" $id_lt "scalar") (serialize-qp "id__gte" $id_gte "scalar") (serialize-qp "id__gt" $id_gt "scalar") (serialize-qp "name__n" $name_n "scalar") (serialize-qp "name__ic" $name_ic "scalar") (serialize-qp "name__nic" $name_nic "scalar") (serialize-qp "name__iew" $name_iew "scalar") (serialize-qp "name__niew" $name_niew "scalar") (serialize-qp "name__isw" $name_isw "scalar") (serialize-qp "name__nisw" $name_nisw "scalar") (serialize-qp "name__ie" $name_ie "scalar") (serialize-qp "name__nie" $name_nie "scalar") (serialize-qp "slug__n" $slug_n "scalar") (serialize-qp "slug__ic" $slug_ic "scalar") (serialize-qp "slug__nic" $slug_nic "scalar") (serialize-qp "slug__iew" $slug_iew "scalar") (serialize-qp "slug__niew" $slug_niew "scalar") (serialize-qp "slug__isw" $slug_isw "scalar") (serialize-qp "slug__nisw" $slug_nisw "scalar") (serialize-qp "slug__ie" $slug_ie "scalar") (serialize-qp "slug__nie" $slug_nie "scalar") (serialize-qp "description__n" $description_n "scalar") (serialize-qp "description__ic" $description_ic "scalar") (serialize-qp "description__nic" $description_nic "scalar") (serialize-qp "description__iew" $description_iew "scalar") (serialize-qp "description__niew" $description_niew "scalar") (serialize-qp "description__isw" $description_isw "scalar") (serialize-qp "description__nisw" $description_nisw "scalar") (serialize-qp "description__ie" $description_ie "scalar") (serialize-qp "description__nie" $description_nie "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
@@ -6186,7 +6195,7 @@ export def "dcim-manufacturers-create" [
   --description: string
   name: string
   slug: string # format: slug
-]: any -> record<description: string, devicetype_count: int, id: int, inventoryitem_count: int, name: string, platform_count: int, slug: string> {
+]: any -> oneof<record<description: string, devicetype_count: int, id: int, inventoryitem_count: int, name: string, platform_count: int, slug: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6259,7 +6268,7 @@ export def "dcim-manufacturers-read" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<description: string, devicetype_count: int, id: int, inventoryitem_count: int, name: string, platform_count: int, slug: string> {
+]: nothing -> oneof<record<description: string, devicetype_count: int, id: int, inventoryitem_count: int, name: string, platform_count: int, slug: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -6297,7 +6306,7 @@ export def "dcim-manufacturers-partial-update" [
   --description: string
   name: string
   slug: string # format: slug
-]: any -> record<description: string, devicetype_count: int, id: int, inventoryitem_count: int, name: string, platform_count: int, slug: string> {
+]: any -> oneof<record<description: string, devicetype_count: int, id: int, inventoryitem_count: int, name: string, platform_count: int, slug: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6338,7 +6347,7 @@ export def "dcim-manufacturers-update" [
   --description: string
   name: string
   slug: string # format: slug
-]: any -> record<description: string, devicetype_count: int, id: int, inventoryitem_count: int, name: string, platform_count: int, slug: string> {
+]: any -> oneof<record<description: string, devicetype_count: int, id: int, inventoryitem_count: int, name: string, platform_count: int, slug: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6429,7 +6438,7 @@ export def "dcim-platforms-list" [
   --manufacturer-n: string
   --limit: int # Number of results to return per page.
   --offset: int # The initial index from which to return the results.
-]: nothing -> record<count: int, next: string, previous: string, results: table<description: string, device_count: int, id: int, manufacturer: record, name: string, napalm_args: string, napalm_driver: string, slug: string, virtualmachine_count: int>> {
+]: nothing -> oneof<record<count: int, next: string, previous: string, results: table<description: string, device_count: int, id: int, manufacturer: record, name: string, napalm_args: string, napalm_driver: string, slug: string, virtualmachine_count: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "slug" $slug "scalar") (serialize-qp "napalm_driver" $napalm_driver "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "manufacturer_id" $manufacturer_id "scalar") (serialize-qp "manufacturer" $manufacturer "scalar") (serialize-qp "id__n" $id_n "scalar") (serialize-qp "id__lte" $id_lte "scalar") (serialize-qp "id__lt" $id_lt "scalar") (serialize-qp "id__gte" $id_gte "scalar") (serialize-qp "id__gt" $id_gt "scalar") (serialize-qp "name__n" $name_n "scalar") (serialize-qp "name__ic" $name_ic "scalar") (serialize-qp "name__nic" $name_nic "scalar") (serialize-qp "name__iew" $name_iew "scalar") (serialize-qp "name__niew" $name_niew "scalar") (serialize-qp "name__isw" $name_isw "scalar") (serialize-qp "name__nisw" $name_nisw "scalar") (serialize-qp "name__ie" $name_ie "scalar") (serialize-qp "name__nie" $name_nie "scalar") (serialize-qp "slug__n" $slug_n "scalar") (serialize-qp "slug__ic" $slug_ic "scalar") (serialize-qp "slug__nic" $slug_nic "scalar") (serialize-qp "slug__iew" $slug_iew "scalar") (serialize-qp "slug__niew" $slug_niew "scalar") (serialize-qp "slug__isw" $slug_isw "scalar") (serialize-qp "slug__nisw" $slug_nisw "scalar") (serialize-qp "slug__ie" $slug_ie "scalar") (serialize-qp "slug__nie" $slug_nie "scalar") (serialize-qp "napalm_driver__n" $napalm_driver_n "scalar") (serialize-qp "napalm_driver__ic" $napalm_driver_ic "scalar") (serialize-qp "napalm_driver__nic" $napalm_driver_nic "scalar") (serialize-qp "napalm_driver__iew" $napalm_driver_iew "scalar") (serialize-qp "napalm_driver__niew" $napalm_driver_niew "scalar") (serialize-qp "napalm_driver__isw" $napalm_driver_isw "scalar") (serialize-qp "napalm_driver__nisw" $napalm_driver_nisw "scalar") (serialize-qp "napalm_driver__ie" $napalm_driver_ie "scalar") (serialize-qp "napalm_driver__nie" $napalm_driver_nie "scalar") (serialize-qp "description__n" $description_n "scalar") (serialize-qp "description__ic" $description_ic "scalar") (serialize-qp "description__nic" $description_nic "scalar") (serialize-qp "description__iew" $description_iew "scalar") (serialize-qp "description__niew" $description_niew "scalar") (serialize-qp "description__isw" $description_isw "scalar") (serialize-qp "description__nisw" $description_nisw "scalar") (serialize-qp "description__ie" $description_ie "scalar") (serialize-qp "description__nie" $description_nie "scalar") (serialize-qp "manufacturer_id__n" $manufacturer_id_n "scalar") (serialize-qp "manufacturer__n" $manufacturer_n "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
@@ -6469,7 +6478,7 @@ export def "dcim-platforms-create" [
   --napalm-args: string # Additional arguments to pass when initiating the NAPALM driver (JSON format) (nullable)
   --napalm-driver: string # The name of the NAPALM driver to use when interacting with devices
   slug: string # format: slug
-]: any -> record<description: string, device_count: int, id: int, manufacturer: record<devicetype_count: int, id: int, name: string, slug: string, url: string>, name: string, napalm_args: string, napalm_driver: string, slug: string, virtualmachine_count: int> {
+]: any -> oneof<record<description: string, device_count: int, id: int, manufacturer: record<devicetype_count: int, id: int, name: string, slug: string, url: string>, name: string, napalm_args: string, napalm_driver: string, slug: string, virtualmachine_count: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6542,7 +6551,7 @@ export def "dcim-platforms-read" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<description: string, device_count: int, id: int, manufacturer: record<devicetype_count: int, id: int, name: string, slug: string, url: string>, name: string, napalm_args: string, napalm_driver: string, slug: string, virtualmachine_count: int> {
+]: nothing -> oneof<record<description: string, device_count: int, id: int, manufacturer: record<devicetype_count: int, id: int, name: string, slug: string, url: string>, name: string, napalm_args: string, napalm_driver: string, slug: string, virtualmachine_count: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -6583,7 +6592,7 @@ export def "dcim-platforms-partial-update" [
   --napalm-args: string # Additional arguments to pass when initiating the NAPALM driver (JSON format) (nullable)
   --napalm-driver: string # The name of the NAPALM driver to use when interacting with devices
   slug: string # format: slug
-]: any -> record<description: string, device_count: int, id: int, manufacturer: record<devicetype_count: int, id: int, name: string, slug: string, url: string>, name: string, napalm_args: string, napalm_driver: string, slug: string, virtualmachine_count: int> {
+]: any -> oneof<record<description: string, device_count: int, id: int, manufacturer: record<devicetype_count: int, id: int, name: string, slug: string, url: string>, name: string, napalm_args: string, napalm_driver: string, slug: string, virtualmachine_count: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6627,7 +6636,7 @@ export def "dcim-platforms-update" [
   --napalm-args: string # Additional arguments to pass when initiating the NAPALM driver (JSON format) (nullable)
   --napalm-driver: string # The name of the NAPALM driver to use when interacting with devices
   slug: string # format: slug
-]: any -> record<description: string, device_count: int, id: int, manufacturer: record<devicetype_count: int, id: int, name: string, slug: string, url: string>, name: string, napalm_args: string, napalm_driver: string, slug: string, virtualmachine_count: int> {
+]: any -> oneof<record<description: string, device_count: int, id: int, manufacturer: record<devicetype_count: int, id: int, name: string, slug: string, url: string>, name: string, napalm_args: string, napalm_driver: string, slug: string, virtualmachine_count: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6681,7 +6690,7 @@ export def "dcim-power-connections-list" [
   --connection-status-n: string
   --limit: int # Number of results to return per page.
   --offset: int # The initial index from which to return the results.
-]: nothing -> record<count: int, next: string, previous: string, results: table<allocated_draw: int, cable: record, connected_endpoint: record, connected_endpoint_type: string, connection_status: record, description: string, device: record, id: int, maximum_draw: int, name: string, tags: list, type: record>> {
+]: nothing -> oneof<record<count: int, next: string, previous: string, results: table<allocated_draw: int, cable: record, connected_endpoint: record, connected_endpoint_type: string, connection_status: record, description: string, device: record, id: int, maximum_draw: int, name: string, tags: list, type: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "connection_status" $connection_status "scalar") (serialize-qp "site" $site "scalar") (serialize-qp "device_id" $device_id "scalar") (serialize-qp "device" $device "scalar") (serialize-qp "name__n" $name_n "scalar") (serialize-qp "name__ic" $name_ic "scalar") (serialize-qp "name__nic" $name_nic "scalar") (serialize-qp "name__iew" $name_iew "scalar") (serialize-qp "name__niew" $name_niew "scalar") (serialize-qp "name__isw" $name_isw "scalar") (serialize-qp "name__nisw" $name_nisw "scalar") (serialize-qp "name__ie" $name_ie "scalar") (serialize-qp "name__nie" $name_nie "scalar") (serialize-qp "connection_status__n" $connection_status_n "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
@@ -6781,7 +6790,7 @@ export def "dcim-power-feeds-list" [
   --tag-n: string
   --limit: int # Number of results to return per page.
   --offset: int # The initial index from which to return the results.
-]: nothing -> record<count: int, next: string, previous: string, results: table<amperage: int, comments: string, created: string, custom_fields: record, id: int, last_updated: string, max_utilization: int, name: string, phase: record, power_panel: record, rack: record, status: record, supply: record, tags: list, type: record, voltage: int>> {
+]: nothing -> oneof<record<count: int, next: string, previous: string, results: table<amperage: int, comments: string, created: string, custom_fields: record, id: int, last_updated: string, max_utilization: int, name: string, phase: record, power_panel: record, rack: record, status: record, supply: record, tags: list, type: record, voltage: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "supply" $supply "scalar") (serialize-qp "phase" $phase "scalar") (serialize-qp "voltage" $voltage "scalar") (serialize-qp "amperage" $amperage "scalar") (serialize-qp "max_utilization" $max_utilization "scalar") (serialize-qp "created" $created "scalar") (serialize-qp "created__gte" $created_gte "scalar") (serialize-qp "created__lte" $created_lte "scalar") (serialize-qp "last_updated" $last_updated "scalar") (serialize-qp "last_updated__gte" $last_updated_gte "scalar") (serialize-qp "last_updated__lte" $last_updated_lte "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "region_id" $region_id "scalar") (serialize-qp "region" $region "scalar") (serialize-qp "site_id" $site_id "scalar") (serialize-qp "site" $site "scalar") (serialize-qp "power_panel_id" $power_panel_id "scalar") (serialize-qp "rack_id" $rack_id "scalar") (serialize-qp "tag" $tag "scalar") (serialize-qp "id__n" $id_n "scalar") (serialize-qp "id__lte" $id_lte "scalar") (serialize-qp "id__lt" $id_lt "scalar") (serialize-qp "id__gte" $id_gte "scalar") (serialize-qp "id__gt" $id_gt "scalar") (serialize-qp "name__n" $name_n "scalar") (serialize-qp "name__ic" $name_ic "scalar") (serialize-qp "name__nic" $name_nic "scalar") (serialize-qp "name__iew" $name_iew "scalar") (serialize-qp "name__niew" $name_niew "scalar") (serialize-qp "name__isw" $name_isw "scalar") (serialize-qp "name__nisw" $name_nisw "scalar") (serialize-qp "name__ie" $name_ie "scalar") (serialize-qp "name__nie" $name_nie "scalar") (serialize-qp "status__n" $status_n "scalar") (serialize-qp "type__n" $type_n "scalar") (serialize-qp "supply__n" $supply_n "scalar") (serialize-qp "phase__n" $phase_n "scalar") (serialize-qp "voltage__n" $voltage_n "scalar") (serialize-qp "voltage__lte" $voltage_lte "scalar") (serialize-qp "voltage__lt" $voltage_lt "scalar") (serialize-qp "voltage__gte" $voltage_gte "scalar") (serialize-qp "voltage__gt" $voltage_gt "scalar") (serialize-qp "amperage__n" $amperage_n "scalar") (serialize-qp "amperage__lte" $amperage_lte "scalar") (serialize-qp "amperage__lt" $amperage_lt "scalar") (serialize-qp "amperage__gte" $amperage_gte "scalar") (serialize-qp "amperage__gt" $amperage_gt "scalar") (serialize-qp "max_utilization__n" $max_utilization_n "scalar") (serialize-qp "max_utilization__lte" $max_utilization_lte "scalar") (serialize-qp "max_utilization__lt" $max_utilization_lt "scalar") (serialize-qp "max_utilization__gte" $max_utilization_gte "scalar") (serialize-qp "max_utilization__gt" $max_utilization_gt "scalar") (serialize-qp "region_id__n" $region_id_n "scalar") (serialize-qp "region__n" $region_n "scalar") (serialize-qp "site_id__n" $site_id_n "scalar") (serialize-qp "site__n" $site_n "scalar") (serialize-qp "power_panel_id__n" $power_panel_id_n "scalar") (serialize-qp "rack_id__n" $rack_id_n "scalar") (serialize-qp "tag__n" $tag_n "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
@@ -6828,7 +6837,7 @@ export def "dcim-power-feeds-create" [
   --tags: list<string>
   --type: string@type-completer-4
   --voltage: int
-]: any -> record<amperage: int, comments: string, created: string, custom_fields: record, id: int, last_updated: string, max_utilization: int, name: string, phase: record<label: string, value: string>, power_panel: record<id: int, name: string, powerfeed_count: int, url: string>, rack: record<device_count: int, display_name: string, id: int, name: string, url: string>, status: record<label: string, value: string>, supply: record<label: string, value: string>, tags: list<string>, type: record<label: string, value: string>, voltage: int> {
+]: any -> oneof<record<amperage: int, comments: string, created: string, custom_fields: record, id: int, last_updated: string, max_utilization: int, name: string, phase: record<label: string, value: string>, power_panel: record<id: int, name: string, powerfeed_count: int, url: string>, rack: record<device_count: int, display_name: string, id: int, name: string, url: string>, status: record<label: string, value: string>, supply: record<label: string, value: string>, tags: list<string>, type: record<label: string, value: string>, voltage: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6901,7 +6910,7 @@ export def "dcim-power-feeds-read" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<amperage: int, comments: string, created: string, custom_fields: record, id: int, last_updated: string, max_utilization: int, name: string, phase: record<label: string, value: string>, power_panel: record<id: int, name: string, powerfeed_count: int, url: string>, rack: record<device_count: int, display_name: string, id: int, name: string, url: string>, status: record<label: string, value: string>, supply: record<label: string, value: string>, tags: list<string>, type: record<label: string, value: string>, voltage: int> {
+]: nothing -> oneof<record<amperage: int, comments: string, created: string, custom_fields: record, id: int, last_updated: string, max_utilization: int, name: string, phase: record<label: string, value: string>, power_panel: record<id: int, name: string, powerfeed_count: int, url: string>, rack: record<device_count: int, display_name: string, id: int, name: string, url: string>, status: record<label: string, value: string>, supply: record<label: string, value: string>, tags: list<string>, type: record<label: string, value: string>, voltage: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -6949,7 +6958,7 @@ export def "dcim-power-feeds-partial-update" [
   --tags: list<string>
   --type: string@type-completer-4
   --voltage: int
-]: any -> record<amperage: int, comments: string, created: string, custom_fields: record, id: int, last_updated: string, max_utilization: int, name: string, phase: record<label: string, value: string>, power_panel: record<id: int, name: string, powerfeed_count: int, url: string>, rack: record<device_count: int, display_name: string, id: int, name: string, url: string>, status: record<label: string, value: string>, supply: record<label: string, value: string>, tags: list<string>, type: record<label: string, value: string>, voltage: int> {
+]: any -> oneof<record<amperage: int, comments: string, created: string, custom_fields: record, id: int, last_updated: string, max_utilization: int, name: string, phase: record<label: string, value: string>, power_panel: record<id: int, name: string, powerfeed_count: int, url: string>, rack: record<device_count: int, display_name: string, id: int, name: string, url: string>, status: record<label: string, value: string>, supply: record<label: string, value: string>, tags: list<string>, type: record<label: string, value: string>, voltage: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7000,7 +7009,7 @@ export def "dcim-power-feeds-update" [
   --tags: list<string>
   --type: string@type-completer-4
   --voltage: int
-]: any -> record<amperage: int, comments: string, created: string, custom_fields: record, id: int, last_updated: string, max_utilization: int, name: string, phase: record<label: string, value: string>, power_panel: record<id: int, name: string, powerfeed_count: int, url: string>, rack: record<device_count: int, display_name: string, id: int, name: string, url: string>, status: record<label: string, value: string>, supply: record<label: string, value: string>, tags: list<string>, type: record<label: string, value: string>, voltage: int> {
+]: any -> oneof<record<amperage: int, comments: string, created: string, custom_fields: record, id: int, last_updated: string, max_utilization: int, name: string, phase: record<label: string, value: string>, power_panel: record<id: int, name: string, powerfeed_count: int, url: string>, rack: record<device_count: int, display_name: string, id: int, name: string, url: string>, status: record<label: string, value: string>, supply: record<label: string, value: string>, tags: list<string>, type: record<label: string, value: string>, voltage: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7063,7 +7072,7 @@ export def "dcim-power-outlet-templates-list" [
   --devicetype-id-n: string
   --limit: int # Number of results to return per page.
   --offset: int # The initial index from which to return the results.
-]: nothing -> record<count: int, next: string, previous: string, results: table<device_type: record, feed_leg: record, id: int, name: string, power_port: record, type: record>> {
+]: nothing -> oneof<record<count: int, next: string, previous: string, results: table<device_type: record, feed_leg: record, id: int, name: string, power_port: record, type: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "feed_leg" $feed_leg "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "devicetype_id" $devicetype_id "scalar") (serialize-qp "id__n" $id_n "scalar") (serialize-qp "id__lte" $id_lte "scalar") (serialize-qp "id__lt" $id_lt "scalar") (serialize-qp "id__gte" $id_gte "scalar") (serialize-qp "id__gt" $id_gt "scalar") (serialize-qp "name__n" $name_n "scalar") (serialize-qp "name__ic" $name_ic "scalar") (serialize-qp "name__nic" $name_nic "scalar") (serialize-qp "name__iew" $name_iew "scalar") (serialize-qp "name__niew" $name_niew "scalar") (serialize-qp "name__isw" $name_isw "scalar") (serialize-qp "name__nisw" $name_nisw "scalar") (serialize-qp "name__ie" $name_ie "scalar") (serialize-qp "name__nie" $name_nie "scalar") (serialize-qp "type__n" $type_n "scalar") (serialize-qp "feed_leg__n" $feed_leg_n "scalar") (serialize-qp "devicetype_id__n" $devicetype_id_n "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
@@ -7102,7 +7111,7 @@ export def "dcim-power-outlet-templates-create" [
   name: string
   --power-port: int # nullable
   --type: string@type-completer-5
-]: any -> record<device_type: record<device_count: int, display_name: string, id: int, manufacturer: record<devicetype_count: int, id: int, name: string, slug: string, url: string>, model: string, slug: string, url: string>, feed_leg: record<label: string, value: string>, id: int, name: string, power_port: record<id: int, name: string, url: string>, type: record<label: string, value: string>> {
+]: any -> oneof<record<device_type: record<device_count: int, display_name: string, id: int, manufacturer: record<devicetype_count: int, id: int, name: string, slug: string, url: string>, model: string, slug: string, url: string>, feed_leg: record<label: string, value: string>, id: int, name: string, power_port: record<id: int, name: string, url: string>, type: record<label: string, value: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7175,7 +7184,7 @@ export def "dcim-power-outlet-templates-read" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<device_type: record<device_count: int, display_name: string, id: int, manufacturer: record<devicetype_count: int, id: int, name: string, slug: string, url: string>, model: string, slug: string, url: string>, feed_leg: record<label: string, value: string>, id: int, name: string, power_port: record<id: int, name: string, url: string>, type: record<label: string, value: string>> {
+]: nothing -> oneof<record<device_type: record<device_count: int, display_name: string, id: int, manufacturer: record<devicetype_count: int, id: int, name: string, slug: string, url: string>, model: string, slug: string, url: string>, feed_leg: record<label: string, value: string>, id: int, name: string, power_port: record<id: int, name: string, url: string>, type: record<label: string, value: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -7215,7 +7224,7 @@ export def "dcim-power-outlet-templates-partial-update" [
   name: string
   --power-port: int # nullable
   --type: string@type-completer-5
-]: any -> record<device_type: record<device_count: int, display_name: string, id: int, manufacturer: record<devicetype_count: int, id: int, name: string, slug: string, url: string>, model: string, slug: string, url: string>, feed_leg: record<label: string, value: string>, id: int, name: string, power_port: record<id: int, name: string, url: string>, type: record<label: string, value: string>> {
+]: any -> oneof<record<device_type: record<device_count: int, display_name: string, id: int, manufacturer: record<devicetype_count: int, id: int, name: string, slug: string, url: string>, model: string, slug: string, url: string>, feed_leg: record<label: string, value: string>, id: int, name: string, power_port: record<id: int, name: string, url: string>, type: record<label: string, value: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7258,7 +7267,7 @@ export def "dcim-power-outlet-templates-update" [
   name: string
   --power-port: int # nullable
   --type: string@type-completer-5
-]: any -> record<device_type: record<device_count: int, display_name: string, id: int, manufacturer: record<devicetype_count: int, id: int, name: string, slug: string, url: string>, model: string, slug: string, url: string>, feed_leg: record<label: string, value: string>, id: int, name: string, power_port: record<id: int, name: string, url: string>, type: record<label: string, value: string>> {
+]: any -> oneof<record<device_type: record<device_count: int, display_name: string, id: int, manufacturer: record<devicetype_count: int, id: int, name: string, slug: string, url: string>, model: string, slug: string, url: string>, feed_leg: record<label: string, value: string>, id: int, name: string, power_port: record<id: int, name: string, url: string>, type: record<label: string, value: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7346,7 +7355,7 @@ export def "dcim-power-outlets-list" [
   --type-n: string
   --limit: int # Number of results to return per page.
   --offset: int # The initial index from which to return the results.
-]: nothing -> record<count: int, next: string, previous: string, results: table<cable: record, connected_endpoint: record, connected_endpoint_type: string, connection_status: record, description: string, device: record, feed_leg: record, id: int, name: string, power_port: record, tags: list, type: record>> {
+]: nothing -> oneof<record<count: int, next: string, previous: string, results: table<cable: record, connected_endpoint: record, connected_endpoint_type: string, connection_status: record, description: string, device: record, feed_leg: record, id: int, name: string, power_port: record, tags: list, type: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "feed_leg" $feed_leg "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "connection_status" $connection_status "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "region_id" $region_id "scalar") (serialize-qp "region" $region "scalar") (serialize-qp "site_id" $site_id "scalar") (serialize-qp "site" $site "scalar") (serialize-qp "device_id" $device_id "scalar") (serialize-qp "device" $device "scalar") (serialize-qp "tag" $tag "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "cabled" $cabled "scalar") (serialize-qp "id__n" $id_n "scalar") (serialize-qp "id__lte" $id_lte "scalar") (serialize-qp "id__lt" $id_lt "scalar") (serialize-qp "id__gte" $id_gte "scalar") (serialize-qp "id__gt" $id_gt "scalar") (serialize-qp "name__n" $name_n "scalar") (serialize-qp "name__ic" $name_ic "scalar") (serialize-qp "name__nic" $name_nic "scalar") (serialize-qp "name__iew" $name_iew "scalar") (serialize-qp "name__niew" $name_niew "scalar") (serialize-qp "name__isw" $name_isw "scalar") (serialize-qp "name__nisw" $name_nisw "scalar") (serialize-qp "name__ie" $name_ie "scalar") (serialize-qp "name__nie" $name_nie "scalar") (serialize-qp "feed_leg__n" $feed_leg_n "scalar") (serialize-qp "description__n" $description_n "scalar") (serialize-qp "description__ic" $description_ic "scalar") (serialize-qp "description__nic" $description_nic "scalar") (serialize-qp "description__iew" $description_iew "scalar") (serialize-qp "description__niew" $description_niew "scalar") (serialize-qp "description__isw" $description_isw "scalar") (serialize-qp "description__nisw" $description_nisw "scalar") (serialize-qp "description__ie" $description_ie "scalar") (serialize-qp "description__nie" $description_nie "scalar") (serialize-qp "connection_status__n" $connection_status_n "scalar") (serialize-qp "region_id__n" $region_id_n "scalar") (serialize-qp "region__n" $region_n "scalar") (serialize-qp "site_id__n" $site_id_n "scalar") (serialize-qp "site__n" $site_n "scalar") (serialize-qp "device_id__n" $device_id_n "scalar") (serialize-qp "device__n" $device_n "scalar") (serialize-qp "tag__n" $tag_n "scalar") (serialize-qp "type__n" $type_n "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
@@ -7370,7 +7379,6 @@ export def "dcim-power-outlets-list" [
 # POST /dcim/power-outlets/
 #
 # operationId: dcim_power-outlets_create
-# --cable shape: {label?: string}
 export def "dcim-power-outlets-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7390,7 +7398,7 @@ export def "dcim-power-outlets-create" [
   --power-port: int # nullable
   --tags: list<string>
   --type: string@type-completer-5 # Physical port type
-]: any -> record<cable: record<id: int, label: string, url: string>, connected_endpoint: record, connected_endpoint_type: string, connection_status: record<label: string, value: bool>, description: string, device: record<display_name: string, id: int, name: string, url: string>, feed_leg: record<label: string, value: string>, id: int, name: string, power_port: record<cable: int, connection_status: record<label: string, value: bool>, device: record<display_name: string, id: int, name: string, url: string>, id: int, name: string, url: string>, tags: list<string>, type: record<label: string, value: string>> {
+]: any -> oneof<record<cable: record<id: int, label: string, url: string>, connected_endpoint: record, connected_endpoint_type: string, connection_status: record<label: string, value: bool>, description: string, device: record<display_name: string, id: int, name: string, url: string>, feed_leg: record<label: string, value: string>, id: int, name: string, power_port: record<cable: int, connection_status: record<label: string, value: bool>, device: record<display_name: string, id: int, name: string, url: string>, id: int, name: string, url: string>, tags: list<string>, type: record<label: string, value: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7463,7 +7471,7 @@ export def "dcim-power-outlets-read" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<cable: record<id: int, label: string, url: string>, connected_endpoint: record, connected_endpoint_type: string, connection_status: record<label: string, value: bool>, description: string, device: record<display_name: string, id: int, name: string, url: string>, feed_leg: record<label: string, value: string>, id: int, name: string, power_port: record<cable: int, connection_status: record<label: string, value: bool>, device: record<display_name: string, id: int, name: string, url: string>, id: int, name: string, url: string>, tags: list<string>, type: record<label: string, value: string>> {
+]: nothing -> oneof<record<cable: record<id: int, label: string, url: string>, connected_endpoint: record, connected_endpoint_type: string, connection_status: record<label: string, value: bool>, description: string, device: record<display_name: string, id: int, name: string, url: string>, feed_leg: record<label: string, value: string>, id: int, name: string, power_port: record<cable: int, connection_status: record<label: string, value: bool>, device: record<display_name: string, id: int, name: string, url: string>, id: int, name: string, url: string>, tags: list<string>, type: record<label: string, value: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -7487,7 +7495,6 @@ export def "dcim-power-outlets-read" [
 # PATCH /dcim/power-outlets/{id}/
 #
 # operationId: dcim_power-outlets_partial_update
-# --cable shape: {label?: string}
 export def "dcim-power-outlets-partial-update" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -7508,7 +7515,7 @@ export def "dcim-power-outlets-partial-update" [
   --power-port: int # nullable
   --tags: list<string>
   --type: string@type-completer-5 # Physical port type
-]: any -> record<cable: record<id: int, label: string, url: string>, connected_endpoint: record, connected_endpoint_type: string, connection_status: record<label: string, value: bool>, description: string, device: record<display_name: string, id: int, name: string, url: string>, feed_leg: record<label: string, value: string>, id: int, name: string, power_port: record<cable: int, connection_status: record<label: string, value: bool>, device: record<display_name: string, id: int, name: string, url: string>, id: int, name: string, url: string>, tags: list<string>, type: record<label: string, value: string>> {
+]: any -> oneof<record<cable: record<id: int, label: string, url: string>, connected_endpoint: record, connected_endpoint_type: string, connection_status: record<label: string, value: bool>, description: string, device: record<display_name: string, id: int, name: string, url: string>, feed_leg: record<label: string, value: string>, id: int, name: string, power_port: record<cable: int, connection_status: record<label: string, value: bool>, device: record<display_name: string, id: int, name: string, url: string>, id: int, name: string, url: string>, tags: list<string>, type: record<label: string, value: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7535,7 +7542,6 @@ export def "dcim-power-outlets-partial-update" [
 # PUT /dcim/power-outlets/{id}/
 #
 # operationId: dcim_power-outlets_update
-# --cable shape: {label?: string}
 export def "dcim-power-outlets-update" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -7556,7 +7562,7 @@ export def "dcim-power-outlets-update" [
   --power-port: int # nullable
   --tags: list<string>
   --type: string@type-completer-5 # Physical port type
-]: any -> record<cable: record<id: int, label: string, url: string>, connected_endpoint: record, connected_endpoint_type: string, connection_status: record<label: string, value: bool>, description: string, device: record<display_name: string, id: int, name: string, url: string>, feed_leg: record<label: string, value: string>, id: int, name: string, power_port: record<cable: int, connection_status: record<label: string, value: bool>, device: record<display_name: string, id: int, name: string, url: string>, id: int, name: string, url: string>, tags: list<string>, type: record<label: string, value: string>> {
+]: any -> oneof<record<cable: record<id: int, label: string, url: string>, connected_endpoint: record, connected_endpoint_type: string, connection_status: record<label: string, value: bool>, description: string, device: record<display_name: string, id: int, name: string, url: string>, feed_leg: record<label: string, value: string>, id: int, name: string, power_port: record<cable: int, connection_status: record<label: string, value: bool>, device: record<display_name: string, id: int, name: string, url: string>, id: int, name: string, url: string>, tags: list<string>, type: record<label: string, value: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7595,7 +7601,7 @@ export def "dcim-power-outlets-trace" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<cable: record<id: int, label: string, url: string>, connected_endpoint: record, connected_endpoint_type: string, connection_status: record<label: string, value: bool>, description: string, device: record<display_name: string, id: int, name: string, url: string>, feed_leg: record<label: string, value: string>, id: int, name: string, power_port: record<cable: int, connection_status: record<label: string, value: bool>, device: record<display_name: string, id: int, name: string, url: string>, id: int, name: string, url: string>, tags: list<string>, type: record<label: string, value: string>> {
+]: nothing -> oneof<record<cable: record<id: int, label: string, url: string>, connected_endpoint: record, connected_endpoint_type: string, connection_status: record<label: string, value: bool>, description: string, device: record<display_name: string, id: int, name: string, url: string>, feed_leg: record<label: string, value: string>, id: int, name: string, power_port: record<cable: int, connection_status: record<label: string, value: bool>, device: record<display_name: string, id: int, name: string, url: string>, id: int, name: string, url: string>, tags: list<string>, type: record<label: string, value: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -7659,7 +7665,7 @@ export def "dcim-power-panels-list" [
   --rack-group-id-n: string
   --limit: int # Number of results to return per page.
   --offset: int # The initial index from which to return the results.
-]: nothing -> record<count: int, next: string, previous: string, results: table<id: int, name: string, powerfeed_count: int, rack_group: record, site: record>> {
+]: nothing -> oneof<record<count: int, next: string, previous: string, results: table<id: int, name: string, powerfeed_count: int, rack_group: record, site: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "region_id" $region_id "scalar") (serialize-qp "region" $region "scalar") (serialize-qp "site_id" $site_id "scalar") (serialize-qp "site" $site "scalar") (serialize-qp "rack_group_id" $rack_group_id "scalar") (serialize-qp "id__n" $id_n "scalar") (serialize-qp "id__lte" $id_lte "scalar") (serialize-qp "id__lt" $id_lt "scalar") (serialize-qp "id__gte" $id_gte "scalar") (serialize-qp "id__gt" $id_gt "scalar") (serialize-qp "name__n" $name_n "scalar") (serialize-qp "name__ic" $name_ic "scalar") (serialize-qp "name__nic" $name_nic "scalar") (serialize-qp "name__iew" $name_iew "scalar") (serialize-qp "name__niew" $name_niew "scalar") (serialize-qp "name__isw" $name_isw "scalar") (serialize-qp "name__nisw" $name_nisw "scalar") (serialize-qp "name__ie" $name_ie "scalar") (serialize-qp "name__nie" $name_nie "scalar") (serialize-qp "region_id__n" $region_id_n "scalar") (serialize-qp "region__n" $region_n "scalar") (serialize-qp "site_id__n" $site_id_n "scalar") (serialize-qp "site__n" $site_n "scalar") (serialize-qp "rack_group_id__n" $rack_group_id_n "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
@@ -7696,7 +7702,7 @@ export def "dcim-power-panels-create" [
   name: string
   --rack-group: int # nullable
   site: int
-]: any -> record<id: int, name: string, powerfeed_count: int, rack_group: record<id: int, name: string, rack_count: int, slug: string, url: string>, site: record<id: int, name: string, slug: string, url: string>> {
+]: any -> oneof<record<id: int, name: string, powerfeed_count: int, rack_group: record<id: int, name: string, rack_count: int, slug: string, url: string>, site: record<id: int, name: string, slug: string, url: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7769,7 +7775,7 @@ export def "dcim-power-panels-read" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<id: int, name: string, powerfeed_count: int, rack_group: record<id: int, name: string, rack_count: int, slug: string, url: string>, site: record<id: int, name: string, slug: string, url: string>> {
+]: nothing -> oneof<record<id: int, name: string, powerfeed_count: int, rack_group: record<id: int, name: string, rack_count: int, slug: string, url: string>, site: record<id: int, name: string, slug: string, url: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -7807,7 +7813,7 @@ export def "dcim-power-panels-partial-update" [
   name: string
   --rack-group: int # nullable
   site: int
-]: any -> record<id: int, name: string, powerfeed_count: int, rack_group: record<id: int, name: string, rack_count: int, slug: string, url: string>, site: record<id: int, name: string, slug: string, url: string>> {
+]: any -> oneof<record<id: int, name: string, powerfeed_count: int, rack_group: record<id: int, name: string, rack_count: int, slug: string, url: string>, site: record<id: int, name: string, slug: string, url: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7848,7 +7854,7 @@ export def "dcim-power-panels-update" [
   name: string
   --rack-group: int # nullable
   site: int
-]: any -> record<id: int, name: string, powerfeed_count: int, rack_group: record<id: int, name: string, rack_count: int, slug: string, url: string>, site: record<id: int, name: string, slug: string, url: string>> {
+]: any -> oneof<record<id: int, name: string, powerfeed_count: int, rack_group: record<id: int, name: string, rack_count: int, slug: string, url: string>, site: record<id: int, name: string, slug: string, url: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7921,7 +7927,7 @@ export def "dcim-power-port-templates-list" [
   --devicetype-id-n: string
   --limit: int # Number of results to return per page.
   --offset: int # The initial index from which to return the results.
-]: nothing -> record<count: int, next: string, previous: string, results: table<allocated_draw: int, device_type: record, id: int, maximum_draw: int, name: string, type: record>> {
+]: nothing -> oneof<record<count: int, next: string, previous: string, results: table<allocated_draw: int, device_type: record, id: int, maximum_draw: int, name: string, type: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "maximum_draw" $maximum_draw "scalar") (serialize-qp "allocated_draw" $allocated_draw "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "devicetype_id" $devicetype_id "scalar") (serialize-qp "id__n" $id_n "scalar") (serialize-qp "id__lte" $id_lte "scalar") (serialize-qp "id__lt" $id_lt "scalar") (serialize-qp "id__gte" $id_gte "scalar") (serialize-qp "id__gt" $id_gt "scalar") (serialize-qp "name__n" $name_n "scalar") (serialize-qp "name__ic" $name_ic "scalar") (serialize-qp "name__nic" $name_nic "scalar") (serialize-qp "name__iew" $name_iew "scalar") (serialize-qp "name__niew" $name_niew "scalar") (serialize-qp "name__isw" $name_isw "scalar") (serialize-qp "name__nisw" $name_nisw "scalar") (serialize-qp "name__ie" $name_ie "scalar") (serialize-qp "name__nie" $name_nie "scalar") (serialize-qp "type__n" $type_n "scalar") (serialize-qp "maximum_draw__n" $maximum_draw_n "scalar") (serialize-qp "maximum_draw__lte" $maximum_draw_lte "scalar") (serialize-qp "maximum_draw__lt" $maximum_draw_lt "scalar") (serialize-qp "maximum_draw__gte" $maximum_draw_gte "scalar") (serialize-qp "maximum_draw__gt" $maximum_draw_gt "scalar") (serialize-qp "allocated_draw__n" $allocated_draw_n "scalar") (serialize-qp "allocated_draw__lte" $allocated_draw_lte "scalar") (serialize-qp "allocated_draw__lt" $allocated_draw_lt "scalar") (serialize-qp "allocated_draw__gte" $allocated_draw_gte "scalar") (serialize-qp "allocated_draw__gt" $allocated_draw_gt "scalar") (serialize-qp "devicetype_id__n" $devicetype_id_n "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
@@ -7960,7 +7966,7 @@ export def "dcim-power-port-templates-create" [
   --maximum-draw: int # Maximum power draw (watts) (nullable)
   name: string
   --type: string@type-completer-6
-]: any -> record<allocated_draw: int, device_type: record<device_count: int, display_name: string, id: int, manufacturer: record<devicetype_count: int, id: int, name: string, slug: string, url: string>, model: string, slug: string, url: string>, id: int, maximum_draw: int, name: string, type: record<label: string, value: string>> {
+]: any -> oneof<record<allocated_draw: int, device_type: record<device_count: int, display_name: string, id: int, manufacturer: record<devicetype_count: int, id: int, name: string, slug: string, url: string>, model: string, slug: string, url: string>, id: int, maximum_draw: int, name: string, type: record<label: string, value: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8033,7 +8039,7 @@ export def "dcim-power-port-templates-read" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<allocated_draw: int, device_type: record<device_count: int, display_name: string, id: int, manufacturer: record<devicetype_count: int, id: int, name: string, slug: string, url: string>, model: string, slug: string, url: string>, id: int, maximum_draw: int, name: string, type: record<label: string, value: string>> {
+]: nothing -> oneof<record<allocated_draw: int, device_type: record<device_count: int, display_name: string, id: int, manufacturer: record<devicetype_count: int, id: int, name: string, slug: string, url: string>, model: string, slug: string, url: string>, id: int, maximum_draw: int, name: string, type: record<label: string, value: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -8073,7 +8079,7 @@ export def "dcim-power-port-templates-partial-update" [
   --maximum-draw: int # Maximum power draw (watts) (nullable)
   name: string
   --type: string@type-completer-6
-]: any -> record<allocated_draw: int, device_type: record<device_count: int, display_name: string, id: int, manufacturer: record<devicetype_count: int, id: int, name: string, slug: string, url: string>, model: string, slug: string, url: string>, id: int, maximum_draw: int, name: string, type: record<label: string, value: string>> {
+]: any -> oneof<record<allocated_draw: int, device_type: record<device_count: int, display_name: string, id: int, manufacturer: record<devicetype_count: int, id: int, name: string, slug: string, url: string>, model: string, slug: string, url: string>, id: int, maximum_draw: int, name: string, type: record<label: string, value: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8116,7 +8122,7 @@ export def "dcim-power-port-templates-update" [
   --maximum-draw: int # Maximum power draw (watts) (nullable)
   name: string
   --type: string@type-completer-6
-]: any -> record<allocated_draw: int, device_type: record<device_count: int, display_name: string, id: int, manufacturer: record<devicetype_count: int, id: int, name: string, slug: string, url: string>, model: string, slug: string, url: string>, id: int, maximum_draw: int, name: string, type: record<label: string, value: string>> {
+]: any -> oneof<record<allocated_draw: int, device_type: record<device_count: int, display_name: string, id: int, manufacturer: record<devicetype_count: int, id: int, name: string, slug: string, url: string>, model: string, slug: string, url: string>, id: int, maximum_draw: int, name: string, type: record<label: string, value: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8214,7 +8220,7 @@ export def "dcim-power-ports-list" [
   --type-n: string
   --limit: int # Number of results to return per page.
   --offset: int # The initial index from which to return the results.
-]: nothing -> record<count: int, next: string, previous: string, results: table<allocated_draw: int, cable: record, connected_endpoint: record, connected_endpoint_type: string, connection_status: record, description: string, device: record, id: int, maximum_draw: int, name: string, tags: list, type: record>> {
+]: nothing -> oneof<record<count: int, next: string, previous: string, results: table<allocated_draw: int, cable: record, connected_endpoint: record, connected_endpoint_type: string, connection_status: record, description: string, device: record, id: int, maximum_draw: int, name: string, tags: list, type: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "maximum_draw" $maximum_draw "scalar") (serialize-qp "allocated_draw" $allocated_draw "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "connection_status" $connection_status "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "region_id" $region_id "scalar") (serialize-qp "region" $region "scalar") (serialize-qp "site_id" $site_id "scalar") (serialize-qp "site" $site "scalar") (serialize-qp "device_id" $device_id "scalar") (serialize-qp "device" $device "scalar") (serialize-qp "tag" $tag "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "cabled" $cabled "scalar") (serialize-qp "id__n" $id_n "scalar") (serialize-qp "id__lte" $id_lte "scalar") (serialize-qp "id__lt" $id_lt "scalar") (serialize-qp "id__gte" $id_gte "scalar") (serialize-qp "id__gt" $id_gt "scalar") (serialize-qp "name__n" $name_n "scalar") (serialize-qp "name__ic" $name_ic "scalar") (serialize-qp "name__nic" $name_nic "scalar") (serialize-qp "name__iew" $name_iew "scalar") (serialize-qp "name__niew" $name_niew "scalar") (serialize-qp "name__isw" $name_isw "scalar") (serialize-qp "name__nisw" $name_nisw "scalar") (serialize-qp "name__ie" $name_ie "scalar") (serialize-qp "name__nie" $name_nie "scalar") (serialize-qp "maximum_draw__n" $maximum_draw_n "scalar") (serialize-qp "maximum_draw__lte" $maximum_draw_lte "scalar") (serialize-qp "maximum_draw__lt" $maximum_draw_lt "scalar") (serialize-qp "maximum_draw__gte" $maximum_draw_gte "scalar") (serialize-qp "maximum_draw__gt" $maximum_draw_gt "scalar") (serialize-qp "allocated_draw__n" $allocated_draw_n "scalar") (serialize-qp "allocated_draw__lte" $allocated_draw_lte "scalar") (serialize-qp "allocated_draw__lt" $allocated_draw_lt "scalar") (serialize-qp "allocated_draw__gte" $allocated_draw_gte "scalar") (serialize-qp "allocated_draw__gt" $allocated_draw_gt "scalar") (serialize-qp "description__n" $description_n "scalar") (serialize-qp "description__ic" $description_ic "scalar") (serialize-qp "description__nic" $description_nic "scalar") (serialize-qp "description__iew" $description_iew "scalar") (serialize-qp "description__niew" $description_niew "scalar") (serialize-qp "description__isw" $description_isw "scalar") (serialize-qp "description__nisw" $description_nisw "scalar") (serialize-qp "description__ie" $description_ie "scalar") (serialize-qp "description__nie" $description_nie "scalar") (serialize-qp "connection_status__n" $connection_status_n "scalar") (serialize-qp "region_id__n" $region_id_n "scalar") (serialize-qp "region__n" $region_n "scalar") (serialize-qp "site_id__n" $site_id_n "scalar") (serialize-qp "site__n" $site_n "scalar") (serialize-qp "device_id__n" $device_id_n "scalar") (serialize-qp "device__n" $device_n "scalar") (serialize-qp "tag__n" $tag_n "scalar") (serialize-qp "type__n" $type_n "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
@@ -8238,7 +8244,6 @@ export def "dcim-power-ports-list" [
 # POST /dcim/power-ports/
 #
 # operationId: dcim_power-ports_create
-# --cable shape: {label?: string}
 export def "dcim-power-ports-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8258,7 +8263,7 @@ export def "dcim-power-ports-create" [
   name: string
   --tags: list<string>
   --type: string@type-completer-6 # Physical port type
-]: any -> record<allocated_draw: int, cable: record<id: int, label: string, url: string>, connected_endpoint: record, connected_endpoint_type: string, connection_status: record<label: string, value: bool>, description: string, device: record<display_name: string, id: int, name: string, url: string>, id: int, maximum_draw: int, name: string, tags: list<string>, type: record<label: string, value: string>> {
+]: any -> oneof<record<allocated_draw: int, cable: record<id: int, label: string, url: string>, connected_endpoint: record, connected_endpoint_type: string, connection_status: record<label: string, value: bool>, description: string, device: record<display_name: string, id: int, name: string, url: string>, id: int, maximum_draw: int, name: string, tags: list<string>, type: record<label: string, value: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8331,7 +8336,7 @@ export def "dcim-power-ports-read" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<allocated_draw: int, cable: record<id: int, label: string, url: string>, connected_endpoint: record, connected_endpoint_type: string, connection_status: record<label: string, value: bool>, description: string, device: record<display_name: string, id: int, name: string, url: string>, id: int, maximum_draw: int, name: string, tags: list<string>, type: record<label: string, value: string>> {
+]: nothing -> oneof<record<allocated_draw: int, cable: record<id: int, label: string, url: string>, connected_endpoint: record, connected_endpoint_type: string, connection_status: record<label: string, value: bool>, description: string, device: record<display_name: string, id: int, name: string, url: string>, id: int, maximum_draw: int, name: string, tags: list<string>, type: record<label: string, value: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -8355,7 +8360,6 @@ export def "dcim-power-ports-read" [
 # PATCH /dcim/power-ports/{id}/
 #
 # operationId: dcim_power-ports_partial_update
-# --cable shape: {label?: string}
 export def "dcim-power-ports-partial-update" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -8376,7 +8380,7 @@ export def "dcim-power-ports-partial-update" [
   name: string
   --tags: list<string>
   --type: string@type-completer-6 # Physical port type
-]: any -> record<allocated_draw: int, cable: record<id: int, label: string, url: string>, connected_endpoint: record, connected_endpoint_type: string, connection_status: record<label: string, value: bool>, description: string, device: record<display_name: string, id: int, name: string, url: string>, id: int, maximum_draw: int, name: string, tags: list<string>, type: record<label: string, value: string>> {
+]: any -> oneof<record<allocated_draw: int, cable: record<id: int, label: string, url: string>, connected_endpoint: record, connected_endpoint_type: string, connection_status: record<label: string, value: bool>, description: string, device: record<display_name: string, id: int, name: string, url: string>, id: int, maximum_draw: int, name: string, tags: list<string>, type: record<label: string, value: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8403,7 +8407,6 @@ export def "dcim-power-ports-partial-update" [
 # PUT /dcim/power-ports/{id}/
 #
 # operationId: dcim_power-ports_update
-# --cable shape: {label?: string}
 export def "dcim-power-ports-update" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -8424,7 +8427,7 @@ export def "dcim-power-ports-update" [
   name: string
   --tags: list<string>
   --type: string@type-completer-6 # Physical port type
-]: any -> record<allocated_draw: int, cable: record<id: int, label: string, url: string>, connected_endpoint: record, connected_endpoint_type: string, connection_status: record<label: string, value: bool>, description: string, device: record<display_name: string, id: int, name: string, url: string>, id: int, maximum_draw: int, name: string, tags: list<string>, type: record<label: string, value: string>> {
+]: any -> oneof<record<allocated_draw: int, cable: record<id: int, label: string, url: string>, connected_endpoint: record, connected_endpoint_type: string, connection_status: record<label: string, value: bool>, description: string, device: record<display_name: string, id: int, name: string, url: string>, id: int, maximum_draw: int, name: string, tags: list<string>, type: record<label: string, value: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8463,7 +8466,7 @@ export def "dcim-power-ports-trace" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<allocated_draw: int, cable: record<id: int, label: string, url: string>, connected_endpoint: record, connected_endpoint_type: string, connection_status: record<label: string, value: bool>, description: string, device: record<display_name: string, id: int, name: string, url: string>, id: int, maximum_draw: int, name: string, tags: list<string>, type: record<label: string, value: string>> {
+]: nothing -> oneof<record<allocated_draw: int, cable: record<id: int, label: string, url: string>, connected_endpoint: record, connected_endpoint_type: string, connection_status: record<label: string, value: bool>, description: string, device: record<display_name: string, id: int, name: string, url: string>, id: int, maximum_draw: int, name: string, tags: list<string>, type: record<label: string, value: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -8549,7 +8552,7 @@ export def "dcim-rack-groups-list" [
   --parent-n: string
   --limit: int # Number of results to return per page.
   --offset: int # The initial index from which to return the results.
-]: nothing -> record<count: int, next: string, previous: string, results: table<description: string, id: int, name: string, parent: record, rack_count: int, site: record, slug: string>> {
+]: nothing -> oneof<record<count: int, next: string, previous: string, results: table<description: string, id: int, name: string, parent: record, rack_count: int, site: record, slug: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "slug" $slug "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "region_id" $region_id "scalar") (serialize-qp "region" $region "scalar") (serialize-qp "site_id" $site_id "scalar") (serialize-qp "site" $site "scalar") (serialize-qp "parent_id" $parent_id "scalar") (serialize-qp "parent" $parent "scalar") (serialize-qp "id__n" $id_n "scalar") (serialize-qp "id__lte" $id_lte "scalar") (serialize-qp "id__lt" $id_lt "scalar") (serialize-qp "id__gte" $id_gte "scalar") (serialize-qp "id__gt" $id_gt "scalar") (serialize-qp "name__n" $name_n "scalar") (serialize-qp "name__ic" $name_ic "scalar") (serialize-qp "name__nic" $name_nic "scalar") (serialize-qp "name__iew" $name_iew "scalar") (serialize-qp "name__niew" $name_niew "scalar") (serialize-qp "name__isw" $name_isw "scalar") (serialize-qp "name__nisw" $name_nisw "scalar") (serialize-qp "name__ie" $name_ie "scalar") (serialize-qp "name__nie" $name_nie "scalar") (serialize-qp "slug__n" $slug_n "scalar") (serialize-qp "slug__ic" $slug_ic "scalar") (serialize-qp "slug__nic" $slug_nic "scalar") (serialize-qp "slug__iew" $slug_iew "scalar") (serialize-qp "slug__niew" $slug_niew "scalar") (serialize-qp "slug__isw" $slug_isw "scalar") (serialize-qp "slug__nisw" $slug_nisw "scalar") (serialize-qp "slug__ie" $slug_ie "scalar") (serialize-qp "slug__nie" $slug_nie "scalar") (serialize-qp "description__n" $description_n "scalar") (serialize-qp "description__ic" $description_ic "scalar") (serialize-qp "description__nic" $description_nic "scalar") (serialize-qp "description__iew" $description_iew "scalar") (serialize-qp "description__niew" $description_niew "scalar") (serialize-qp "description__isw" $description_isw "scalar") (serialize-qp "description__nisw" $description_nisw "scalar") (serialize-qp "description__ie" $description_ie "scalar") (serialize-qp "description__nie" $description_nie "scalar") (serialize-qp "region_id__n" $region_id_n "scalar") (serialize-qp "region__n" $region_n "scalar") (serialize-qp "site_id__n" $site_id_n "scalar") (serialize-qp "site__n" $site_n "scalar") (serialize-qp "parent_id__n" $parent_id_n "scalar") (serialize-qp "parent__n" $parent_n "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
@@ -8588,7 +8591,7 @@ export def "dcim-rack-groups-create" [
   --parent: int # nullable
   site: int
   slug: string # format: slug
-]: any -> record<description: string, id: int, name: string, parent: record<id: int, name: string, rack_count: int, slug: string, url: string>, rack_count: int, site: record<id: int, name: string, slug: string, url: string>, slug: string> {
+]: any -> oneof<record<description: string, id: int, name: string, parent: record<id: int, name: string, rack_count: int, slug: string, url: string>, rack_count: int, site: record<id: int, name: string, slug: string, url: string>, slug: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8661,7 +8664,7 @@ export def "dcim-rack-groups-read" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<description: string, id: int, name: string, parent: record<id: int, name: string, rack_count: int, slug: string, url: string>, rack_count: int, site: record<id: int, name: string, slug: string, url: string>, slug: string> {
+]: nothing -> oneof<record<description: string, id: int, name: string, parent: record<id: int, name: string, rack_count: int, slug: string, url: string>, rack_count: int, site: record<id: int, name: string, slug: string, url: string>, slug: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -8701,7 +8704,7 @@ export def "dcim-rack-groups-partial-update" [
   --parent: int # nullable
   site: int
   slug: string # format: slug
-]: any -> record<description: string, id: int, name: string, parent: record<id: int, name: string, rack_count: int, slug: string, url: string>, rack_count: int, site: record<id: int, name: string, slug: string, url: string>, slug: string> {
+]: any -> oneof<record<description: string, id: int, name: string, parent: record<id: int, name: string, rack_count: int, slug: string, url: string>, rack_count: int, site: record<id: int, name: string, slug: string, url: string>, slug: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8744,7 +8747,7 @@ export def "dcim-rack-groups-update" [
   --parent: int # nullable
   site: int
   slug: string # format: slug
-]: any -> record<description: string, id: int, name: string, parent: record<id: int, name: string, rack_count: int, slug: string, url: string>, rack_count: int, site: record<id: int, name: string, slug: string, url: string>, slug: string> {
+]: any -> oneof<record<description: string, id: int, name: string, parent: record<id: int, name: string, rack_count: int, slug: string, url: string>, rack_count: int, site: record<id: int, name: string, slug: string, url: string>, slug: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8819,7 +8822,7 @@ export def "dcim-rack-reservations-list" [
   --user-n: string
   --limit: int # Number of results to return per page.
   --offset: int # The initial index from which to return the results.
-]: nothing -> record<count: int, next: string, previous: string, results: table<created: string, description: string, id: int, rack: record, tenant: record, units: list, user: record>> {
+]: nothing -> oneof<record<count: int, next: string, previous: string, results: table<created: string, description: string, id: int, rack: record, tenant: record, units: list, user: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "created" $created "scalar") (serialize-qp "tenant_group_id" $tenant_group_id "scalar") (serialize-qp "tenant_group" $tenant_group "scalar") (serialize-qp "tenant_id" $tenant_id "scalar") (serialize-qp "tenant" $tenant "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "rack_id" $rack_id "scalar") (serialize-qp "site_id" $site_id "scalar") (serialize-qp "site" $site "scalar") (serialize-qp "group_id" $group_id "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "user_id" $user_id "scalar") (serialize-qp "user" $user "scalar") (serialize-qp "id__n" $id_n "scalar") (serialize-qp "id__lte" $id_lte "scalar") (serialize-qp "id__lt" $id_lt "scalar") (serialize-qp "id__gte" $id_gte "scalar") (serialize-qp "id__gt" $id_gt "scalar") (serialize-qp "created__n" $created_n "scalar") (serialize-qp "created__lte" $created_lte "scalar") (serialize-qp "created__lt" $created_lt "scalar") (serialize-qp "created__gte" $created_gte "scalar") (serialize-qp "created__gt" $created_gt "scalar") (serialize-qp "tenant_group_id__n" $tenant_group_id_n "scalar") (serialize-qp "tenant_group__n" $tenant_group_n "scalar") (serialize-qp "tenant_id__n" $tenant_id_n "scalar") (serialize-qp "tenant__n" $tenant_n "scalar") (serialize-qp "rack_id__n" $rack_id_n "scalar") (serialize-qp "site_id__n" $site_id_n "scalar") (serialize-qp "site__n" $site_n "scalar") (serialize-qp "group_id__n" $group_id_n "scalar") (serialize-qp "group__n" $group_n "scalar") (serialize-qp "user_id__n" $user_id_n "scalar") (serialize-qp "user__n" $user_n "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
@@ -8858,7 +8861,7 @@ export def "dcim-rack-reservations-create" [
   --tenant: int # nullable
   units: list<int>
   user: int
-]: any -> record<created: string, description: string, id: int, rack: record<device_count: int, display_name: string, id: int, name: string, url: string>, tenant: record<id: int, name: string, slug: string, url: string>, units: list<int>, user: record<id: int, username: string>> {
+]: any -> oneof<record<created: string, description: string, id: int, rack: record<device_count: int, display_name: string, id: int, name: string, url: string>, tenant: record<id: int, name: string, slug: string, url: string>, units: list<int>, user: record<id: int, username: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8931,7 +8934,7 @@ export def "dcim-rack-reservations-read" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<created: string, description: string, id: int, rack: record<device_count: int, display_name: string, id: int, name: string, url: string>, tenant: record<id: int, name: string, slug: string, url: string>, units: list<int>, user: record<id: int, username: string>> {
+]: nothing -> oneof<record<created: string, description: string, id: int, rack: record<device_count: int, display_name: string, id: int, name: string, url: string>, tenant: record<id: int, name: string, slug: string, url: string>, units: list<int>, user: record<id: int, username: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -8971,7 +8974,7 @@ export def "dcim-rack-reservations-partial-update" [
   --tenant: int # nullable
   units: list<int>
   user: int
-]: any -> record<created: string, description: string, id: int, rack: record<device_count: int, display_name: string, id: int, name: string, url: string>, tenant: record<id: int, name: string, slug: string, url: string>, units: list<int>, user: record<id: int, username: string>> {
+]: any -> oneof<record<created: string, description: string, id: int, rack: record<device_count: int, display_name: string, id: int, name: string, url: string>, tenant: record<id: int, name: string, slug: string, url: string>, units: list<int>, user: record<id: int, username: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -9014,7 +9017,7 @@ export def "dcim-rack-reservations-update" [
   --tenant: int # nullable
   units: list<int>
   user: int
-]: any -> record<created: string, description: string, id: int, rack: record<device_count: int, display_name: string, id: int, name: string, url: string>, tenant: record<id: int, name: string, slug: string, url: string>, units: list<int>, user: record<id: int, username: string>> {
+]: any -> oneof<record<created: string, description: string, id: int, rack: record<device_count: int, display_name: string, id: int, name: string, url: string>, tenant: record<id: int, name: string, slug: string, url: string>, units: list<int>, user: record<id: int, username: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -9091,7 +9094,7 @@ export def "dcim-rack-roles-list" [
   --color-nie: string
   --limit: int # Number of results to return per page.
   --offset: int # The initial index from which to return the results.
-]: nothing -> record<count: int, next: string, previous: string, results: table<color: string, description: string, id: int, name: string, rack_count: int, slug: string>> {
+]: nothing -> oneof<record<count: int, next: string, previous: string, results: table<color: string, description: string, id: int, name: string, rack_count: int, slug: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "slug" $slug "scalar") (serialize-qp "color" $color "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "id__n" $id_n "scalar") (serialize-qp "id__lte" $id_lte "scalar") (serialize-qp "id__lt" $id_lt "scalar") (serialize-qp "id__gte" $id_gte "scalar") (serialize-qp "id__gt" $id_gt "scalar") (serialize-qp "name__n" $name_n "scalar") (serialize-qp "name__ic" $name_ic "scalar") (serialize-qp "name__nic" $name_nic "scalar") (serialize-qp "name__iew" $name_iew "scalar") (serialize-qp "name__niew" $name_niew "scalar") (serialize-qp "name__isw" $name_isw "scalar") (serialize-qp "name__nisw" $name_nisw "scalar") (serialize-qp "name__ie" $name_ie "scalar") (serialize-qp "name__nie" $name_nie "scalar") (serialize-qp "slug__n" $slug_n "scalar") (serialize-qp "slug__ic" $slug_ic "scalar") (serialize-qp "slug__nic" $slug_nic "scalar") (serialize-qp "slug__iew" $slug_iew "scalar") (serialize-qp "slug__niew" $slug_niew "scalar") (serialize-qp "slug__isw" $slug_isw "scalar") (serialize-qp "slug__nisw" $slug_nisw "scalar") (serialize-qp "slug__ie" $slug_ie "scalar") (serialize-qp "slug__nie" $slug_nie "scalar") (serialize-qp "color__n" $color_n "scalar") (serialize-qp "color__ic" $color_ic "scalar") (serialize-qp "color__nic" $color_nic "scalar") (serialize-qp "color__iew" $color_iew "scalar") (serialize-qp "color__niew" $color_niew "scalar") (serialize-qp "color__isw" $color_isw "scalar") (serialize-qp "color__nisw" $color_nisw "scalar") (serialize-qp "color__ie" $color_ie "scalar") (serialize-qp "color__nie" $color_nie "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
@@ -9129,7 +9132,7 @@ export def "dcim-rack-roles-create" [
   --description: string
   name: string
   slug: string # format: slug
-]: any -> record<color: string, description: string, id: int, name: string, rack_count: int, slug: string> {
+]: any -> oneof<record<color: string, description: string, id: int, name: string, rack_count: int, slug: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -9202,7 +9205,7 @@ export def "dcim-rack-roles-read" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<color: string, description: string, id: int, name: string, rack_count: int, slug: string> {
+]: nothing -> oneof<record<color: string, description: string, id: int, name: string, rack_count: int, slug: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -9241,7 +9244,7 @@ export def "dcim-rack-roles-partial-update" [
   --description: string
   name: string
   slug: string # format: slug
-]: any -> record<color: string, description: string, id: int, name: string, rack_count: int, slug: string> {
+]: any -> oneof<record<color: string, description: string, id: int, name: string, rack_count: int, slug: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -9283,7 +9286,7 @@ export def "dcim-rack-roles-update" [
   --description: string
   name: string
   slug: string # format: slug
-]: any -> record<color: string, description: string, id: int, name: string, rack_count: int, slug: string> {
+]: any -> oneof<record<color: string, description: string, id: int, name: string, rack_count: int, slug: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -9420,7 +9423,7 @@ export def "dcim-racks-list" [
   --tag-n: string
   --limit: int # Number of results to return per page.
   --offset: int # The initial index from which to return the results.
-]: nothing -> record<count: int, next: string, previous: string, results: table<asset_tag: string, comments: string, created: string, custom_fields: record, desc_units: bool, device_count: int, display_name: string, facility_id: string, group: record, id: int, last_updated: string, name: string, outer_depth: int, outer_unit: record, outer_width: int, powerfeed_count: int, role: record, serial: string, site: record, status: record, tags: list, tenant: record, type: record, u_height: int, width: record>> {
+]: nothing -> oneof<record<count: int, next: string, previous: string, results: table<asset_tag: string, comments: string, created: string, custom_fields: record, desc_units: bool, device_count: int, display_name: string, facility_id: string, group: record, id: int, last_updated: string, name: string, outer_depth: int, outer_unit: record, outer_width: int, powerfeed_count: int, role: record, serial: string, site: record, status: record, tags: list, tenant: record, type: record, u_height: int, width: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "facility_id" $facility_id "scalar") (serialize-qp "asset_tag" $asset_tag "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "width" $width "scalar") (serialize-qp "u_height" $u_height "scalar") (serialize-qp "desc_units" $desc_units "scalar") (serialize-qp "outer_width" $outer_width "scalar") (serialize-qp "outer_depth" $outer_depth "scalar") (serialize-qp "outer_unit" $outer_unit "scalar") (serialize-qp "tenant_group_id" $tenant_group_id "scalar") (serialize-qp "tenant_group" $tenant_group "scalar") (serialize-qp "tenant_id" $tenant_id "scalar") (serialize-qp "tenant" $tenant "scalar") (serialize-qp "created" $created "scalar") (serialize-qp "created__gte" $created_gte "scalar") (serialize-qp "created__lte" $created_lte "scalar") (serialize-qp "last_updated" $last_updated "scalar") (serialize-qp "last_updated__gte" $last_updated_gte "scalar") (serialize-qp "last_updated__lte" $last_updated_lte "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "region_id" $region_id "scalar") (serialize-qp "region" $region "scalar") (serialize-qp "site_id" $site_id "scalar") (serialize-qp "site" $site "scalar") (serialize-qp "group_id" $group_id "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "role_id" $role_id "scalar") (serialize-qp "role" $role "scalar") (serialize-qp "serial" $serial "scalar") (serialize-qp "tag" $tag "scalar") (serialize-qp "id__n" $id_n "scalar") (serialize-qp "id__lte" $id_lte "scalar") (serialize-qp "id__lt" $id_lt "scalar") (serialize-qp "id__gte" $id_gte "scalar") (serialize-qp "id__gt" $id_gt "scalar") (serialize-qp "name__n" $name_n "scalar") (serialize-qp "name__ic" $name_ic "scalar") (serialize-qp "name__nic" $name_nic "scalar") (serialize-qp "name__iew" $name_iew "scalar") (serialize-qp "name__niew" $name_niew "scalar") (serialize-qp "name__isw" $name_isw "scalar") (serialize-qp "name__nisw" $name_nisw "scalar") (serialize-qp "name__ie" $name_ie "scalar") (serialize-qp "name__nie" $name_nie "scalar") (serialize-qp "facility_id__n" $facility_id_n "scalar") (serialize-qp "facility_id__ic" $facility_id_ic "scalar") (serialize-qp "facility_id__nic" $facility_id_nic "scalar") (serialize-qp "facility_id__iew" $facility_id_iew "scalar") (serialize-qp "facility_id__niew" $facility_id_niew "scalar") (serialize-qp "facility_id__isw" $facility_id_isw "scalar") (serialize-qp "facility_id__nisw" $facility_id_nisw "scalar") (serialize-qp "facility_id__ie" $facility_id_ie "scalar") (serialize-qp "facility_id__nie" $facility_id_nie "scalar") (serialize-qp "asset_tag__n" $asset_tag_n "scalar") (serialize-qp "asset_tag__ic" $asset_tag_ic "scalar") (serialize-qp "asset_tag__nic" $asset_tag_nic "scalar") (serialize-qp "asset_tag__iew" $asset_tag_iew "scalar") (serialize-qp "asset_tag__niew" $asset_tag_niew "scalar") (serialize-qp "asset_tag__isw" $asset_tag_isw "scalar") (serialize-qp "asset_tag__nisw" $asset_tag_nisw "scalar") (serialize-qp "asset_tag__ie" $asset_tag_ie "scalar") (serialize-qp "asset_tag__nie" $asset_tag_nie "scalar") (serialize-qp "type__n" $type_n "scalar") (serialize-qp "width__n" $width_n "scalar") (serialize-qp "u_height__n" $u_height_n "scalar") (serialize-qp "u_height__lte" $u_height_lte "scalar") (serialize-qp "u_height__lt" $u_height_lt "scalar") (serialize-qp "u_height__gte" $u_height_gte "scalar") (serialize-qp "u_height__gt" $u_height_gt "scalar") (serialize-qp "outer_width__n" $outer_width_n "scalar") (serialize-qp "outer_width__lte" $outer_width_lte "scalar") (serialize-qp "outer_width__lt" $outer_width_lt "scalar") (serialize-qp "outer_width__gte" $outer_width_gte "scalar") (serialize-qp "outer_width__gt" $outer_width_gt "scalar") (serialize-qp "outer_depth__n" $outer_depth_n "scalar") (serialize-qp "outer_depth__lte" $outer_depth_lte "scalar") (serialize-qp "outer_depth__lt" $outer_depth_lt "scalar") (serialize-qp "outer_depth__gte" $outer_depth_gte "scalar") (serialize-qp "outer_depth__gt" $outer_depth_gt "scalar") (serialize-qp "outer_unit__n" $outer_unit_n "scalar") (serialize-qp "tenant_group_id__n" $tenant_group_id_n "scalar") (serialize-qp "tenant_group__n" $tenant_group_n "scalar") (serialize-qp "tenant_id__n" $tenant_id_n "scalar") (serialize-qp "tenant__n" $tenant_n "scalar") (serialize-qp "region_id__n" $region_id_n "scalar") (serialize-qp "region__n" $region_n "scalar") (serialize-qp "site_id__n" $site_id_n "scalar") (serialize-qp "site__n" $site_n "scalar") (serialize-qp "group_id__n" $group_id_n "scalar") (serialize-qp "group__n" $group_n "scalar") (serialize-qp "status__n" $status_n "scalar") (serialize-qp "role_id__n" $role_id_n "scalar") (serialize-qp "role__n" $role_n "scalar") (serialize-qp "tag__n" $tag_n "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
@@ -9473,7 +9476,7 @@ export def "dcim-racks-create" [
   --type: string@type-completer-7
   --u-height: int # Height in rack units
   --width: int@width-completer # Rail-to-rail width
-]: any -> record<asset_tag: string, comments: string, created: string, custom_fields: record, desc_units: bool, device_count: int, display_name: string, facility_id: string, group: record<id: int, name: string, rack_count: int, slug: string, url: string>, id: int, last_updated: string, name: string, outer_depth: int, outer_unit: record<label: string, value: string>, outer_width: int, powerfeed_count: int, role: record<id: int, name: string, rack_count: int, slug: string, url: string>, serial: string, site: record<id: int, name: string, slug: string, url: string>, status: record<label: string, value: string>, tags: list<string>, tenant: record<id: int, name: string, slug: string, url: string>, type: record<label: string, value: string>, u_height: int, width: record<label: string, value: int>> {
+]: any -> oneof<record<asset_tag: string, comments: string, created: string, custom_fields: record, desc_units: bool, device_count: int, display_name: string, facility_id: string, group: record<id: int, name: string, rack_count: int, slug: string, url: string>, id: int, last_updated: string, name: string, outer_depth: int, outer_unit: record<label: string, value: string>, outer_width: int, powerfeed_count: int, role: record<id: int, name: string, rack_count: int, slug: string, url: string>, serial: string, site: record<id: int, name: string, slug: string, url: string>, status: record<label: string, value: string>, tags: list<string>, tenant: record<id: int, name: string, slug: string, url: string>, type: record<label: string, value: string>, u_height: int, width: record<label: string, value: int>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -9546,7 +9549,7 @@ export def "dcim-racks-read" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<asset_tag: string, comments: string, created: string, custom_fields: record, desc_units: bool, device_count: int, display_name: string, facility_id: string, group: record<id: int, name: string, rack_count: int, slug: string, url: string>, id: int, last_updated: string, name: string, outer_depth: int, outer_unit: record<label: string, value: string>, outer_width: int, powerfeed_count: int, role: record<id: int, name: string, rack_count: int, slug: string, url: string>, serial: string, site: record<id: int, name: string, slug: string, url: string>, status: record<label: string, value: string>, tags: list<string>, tenant: record<id: int, name: string, slug: string, url: string>, type: record<label: string, value: string>, u_height: int, width: record<label: string, value: int>> {
+]: nothing -> oneof<record<asset_tag: string, comments: string, created: string, custom_fields: record, desc_units: bool, device_count: int, display_name: string, facility_id: string, group: record<id: int, name: string, rack_count: int, slug: string, url: string>, id: int, last_updated: string, name: string, outer_depth: int, outer_unit: record<label: string, value: string>, outer_width: int, powerfeed_count: int, role: record<id: int, name: string, rack_count: int, slug: string, url: string>, serial: string, site: record<id: int, name: string, slug: string, url: string>, status: record<label: string, value: string>, tags: list<string>, tenant: record<id: int, name: string, slug: string, url: string>, type: record<label: string, value: string>, u_height: int, width: record<label: string, value: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -9600,7 +9603,7 @@ export def "dcim-racks-partial-update" [
   --type: string@type-completer-7
   --u-height: int # Height in rack units
   --width: int@width-completer # Rail-to-rail width
-]: any -> record<asset_tag: string, comments: string, created: string, custom_fields: record, desc_units: bool, device_count: int, display_name: string, facility_id: string, group: record<id: int, name: string, rack_count: int, slug: string, url: string>, id: int, last_updated: string, name: string, outer_depth: int, outer_unit: record<label: string, value: string>, outer_width: int, powerfeed_count: int, role: record<id: int, name: string, rack_count: int, slug: string, url: string>, serial: string, site: record<id: int, name: string, slug: string, url: string>, status: record<label: string, value: string>, tags: list<string>, tenant: record<id: int, name: string, slug: string, url: string>, type: record<label: string, value: string>, u_height: int, width: record<label: string, value: int>> {
+]: any -> oneof<record<asset_tag: string, comments: string, created: string, custom_fields: record, desc_units: bool, device_count: int, display_name: string, facility_id: string, group: record<id: int, name: string, rack_count: int, slug: string, url: string>, id: int, last_updated: string, name: string, outer_depth: int, outer_unit: record<label: string, value: string>, outer_width: int, powerfeed_count: int, role: record<id: int, name: string, rack_count: int, slug: string, url: string>, serial: string, site: record<id: int, name: string, slug: string, url: string>, status: record<label: string, value: string>, tags: list<string>, tenant: record<id: int, name: string, slug: string, url: string>, type: record<label: string, value: string>, u_height: int, width: record<label: string, value: int>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -9657,7 +9660,7 @@ export def "dcim-racks-update" [
   --type: string@type-completer-7
   --u-height: int # Height in rack units
   --width: int@width-completer # Rail-to-rail width
-]: any -> record<asset_tag: string, comments: string, created: string, custom_fields: record, desc_units: bool, device_count: int, display_name: string, facility_id: string, group: record<id: int, name: string, rack_count: int, slug: string, url: string>, id: int, last_updated: string, name: string, outer_depth: int, outer_unit: record<label: string, value: string>, outer_width: int, powerfeed_count: int, role: record<id: int, name: string, rack_count: int, slug: string, url: string>, serial: string, site: record<id: int, name: string, slug: string, url: string>, status: record<label: string, value: string>, tags: list<string>, tenant: record<id: int, name: string, slug: string, url: string>, type: record<label: string, value: string>, u_height: int, width: record<label: string, value: int>> {
+]: any -> oneof<record<asset_tag: string, comments: string, created: string, custom_fields: record, desc_units: bool, device_count: int, display_name: string, facility_id: string, group: record<id: int, name: string, rack_count: int, slug: string, url: string>, id: int, last_updated: string, name: string, outer_depth: int, outer_unit: record<label: string, value: string>, outer_width: int, powerfeed_count: int, role: record<id: int, name: string, rack_count: int, slug: string, url: string>, serial: string, site: record<id: int, name: string, slug: string, url: string>, status: record<label: string, value: string>, tags: list<string>, tenant: record<id: int, name: string, slug: string, url: string>, type: record<label: string, value: string>, u_height: int, width: record<label: string, value: int>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -9705,7 +9708,7 @@ export def "dcim-racks-elevation" [
   --exclude: int
   --expand-devices: oneof<nothing, bool> # default: true
   --include-images: oneof<nothing, bool> # default: true
-]: nothing -> table<device: record<display_name: string, id: int, name: string, url: string>, face: record<label: string, value: string>, id: int, name: string> {
+]: nothing -> oneof<table<device: record<display_name: string, id: int, name: string, url: string>, face: record<label: string, value: string>, id: int, name: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -9770,7 +9773,7 @@ export def "dcim-rear-port-templates-list" [
   --devicetype-id-n: string
   --limit: int # Number of results to return per page.
   --offset: int # The initial index from which to return the results.
-]: nothing -> record<count: int, next: string, previous: string, results: table<device_type: record, id: int, name: string, positions: int, type: record>> {
+]: nothing -> oneof<record<count: int, next: string, previous: string, results: table<device_type: record, id: int, name: string, positions: int, type: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "positions" $positions "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "devicetype_id" $devicetype_id "scalar") (serialize-qp "id__n" $id_n "scalar") (serialize-qp "id__lte" $id_lte "scalar") (serialize-qp "id__lt" $id_lt "scalar") (serialize-qp "id__gte" $id_gte "scalar") (serialize-qp "id__gt" $id_gt "scalar") (serialize-qp "name__n" $name_n "scalar") (serialize-qp "name__ic" $name_ic "scalar") (serialize-qp "name__nic" $name_nic "scalar") (serialize-qp "name__iew" $name_iew "scalar") (serialize-qp "name__niew" $name_niew "scalar") (serialize-qp "name__isw" $name_isw "scalar") (serialize-qp "name__nisw" $name_nisw "scalar") (serialize-qp "name__ie" $name_ie "scalar") (serialize-qp "name__nie" $name_nie "scalar") (serialize-qp "type__n" $type_n "scalar") (serialize-qp "positions__n" $positions_n "scalar") (serialize-qp "positions__lte" $positions_lte "scalar") (serialize-qp "positions__lt" $positions_lt "scalar") (serialize-qp "positions__gte" $positions_gte "scalar") (serialize-qp "positions__gt" $positions_gt "scalar") (serialize-qp "devicetype_id__n" $devicetype_id_n "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
@@ -9808,7 +9811,7 @@ export def "dcim-rear-port-templates-create" [
   name: string
   --positions: int
   type: string@type-completer-2
-]: any -> record<device_type: record<device_count: int, display_name: string, id: int, manufacturer: record<devicetype_count: int, id: int, name: string, slug: string, url: string>, model: string, slug: string, url: string>, id: int, name: string, positions: int, type: record<label: string, value: string>> {
+]: any -> oneof<record<device_type: record<device_count: int, display_name: string, id: int, manufacturer: record<devicetype_count: int, id: int, name: string, slug: string, url: string>, model: string, slug: string, url: string>, id: int, name: string, positions: int, type: record<label: string, value: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -9881,7 +9884,7 @@ export def "dcim-rear-port-templates-read" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<device_type: record<device_count: int, display_name: string, id: int, manufacturer: record<devicetype_count: int, id: int, name: string, slug: string, url: string>, model: string, slug: string, url: string>, id: int, name: string, positions: int, type: record<label: string, value: string>> {
+]: nothing -> oneof<record<device_type: record<device_count: int, display_name: string, id: int, manufacturer: record<devicetype_count: int, id: int, name: string, slug: string, url: string>, model: string, slug: string, url: string>, id: int, name: string, positions: int, type: record<label: string, value: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -9920,7 +9923,7 @@ export def "dcim-rear-port-templates-partial-update" [
   name: string
   --positions: int
   type: string@type-completer-2
-]: any -> record<device_type: record<device_count: int, display_name: string, id: int, manufacturer: record<devicetype_count: int, id: int, name: string, slug: string, url: string>, model: string, slug: string, url: string>, id: int, name: string, positions: int, type: record<label: string, value: string>> {
+]: any -> oneof<record<device_type: record<device_count: int, display_name: string, id: int, manufacturer: record<devicetype_count: int, id: int, name: string, slug: string, url: string>, model: string, slug: string, url: string>, id: int, name: string, positions: int, type: record<label: string, value: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -9962,7 +9965,7 @@ export def "dcim-rear-port-templates-update" [
   name: string
   --positions: int
   type: string@type-completer-2
-]: any -> record<device_type: record<device_count: int, display_name: string, id: int, manufacturer: record<devicetype_count: int, id: int, name: string, slug: string, url: string>, model: string, slug: string, url: string>, id: int, name: string, positions: int, type: record<label: string, value: string>> {
+]: any -> oneof<record<device_type: record<device_count: int, display_name: string, id: int, manufacturer: record<devicetype_count: int, id: int, name: string, slug: string, url: string>, model: string, slug: string, url: string>, id: int, name: string, positions: int, type: record<label: string, value: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -10052,7 +10055,7 @@ export def "dcim-rear-ports-list" [
   --tag-n: string
   --limit: int # Number of results to return per page.
   --offset: int # The initial index from which to return the results.
-]: nothing -> record<count: int, next: string, previous: string, results: table<cable: record, description: string, device: record, id: int, name: string, positions: int, tags: list, type: record>> {
+]: nothing -> oneof<record<count: int, next: string, previous: string, results: table<cable: record, description: string, device: record, id: int, name: string, positions: int, tags: list, type: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "positions" $positions "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "region_id" $region_id "scalar") (serialize-qp "region" $region "scalar") (serialize-qp "site_id" $site_id "scalar") (serialize-qp "site" $site "scalar") (serialize-qp "device_id" $device_id "scalar") (serialize-qp "device" $device "scalar") (serialize-qp "tag" $tag "scalar") (serialize-qp "cabled" $cabled "scalar") (serialize-qp "id__n" $id_n "scalar") (serialize-qp "id__lte" $id_lte "scalar") (serialize-qp "id__lt" $id_lt "scalar") (serialize-qp "id__gte" $id_gte "scalar") (serialize-qp "id__gt" $id_gt "scalar") (serialize-qp "name__n" $name_n "scalar") (serialize-qp "name__ic" $name_ic "scalar") (serialize-qp "name__nic" $name_nic "scalar") (serialize-qp "name__iew" $name_iew "scalar") (serialize-qp "name__niew" $name_niew "scalar") (serialize-qp "name__isw" $name_isw "scalar") (serialize-qp "name__nisw" $name_nisw "scalar") (serialize-qp "name__ie" $name_ie "scalar") (serialize-qp "name__nie" $name_nie "scalar") (serialize-qp "type__n" $type_n "scalar") (serialize-qp "positions__n" $positions_n "scalar") (serialize-qp "positions__lte" $positions_lte "scalar") (serialize-qp "positions__lt" $positions_lt "scalar") (serialize-qp "positions__gte" $positions_gte "scalar") (serialize-qp "positions__gt" $positions_gt "scalar") (serialize-qp "description__n" $description_n "scalar") (serialize-qp "description__ic" $description_ic "scalar") (serialize-qp "description__nic" $description_nic "scalar") (serialize-qp "description__iew" $description_iew "scalar") (serialize-qp "description__niew" $description_niew "scalar") (serialize-qp "description__isw" $description_isw "scalar") (serialize-qp "description__nisw" $description_nisw "scalar") (serialize-qp "description__ie" $description_ie "scalar") (serialize-qp "description__nie" $description_nie "scalar") (serialize-qp "region_id__n" $region_id_n "scalar") (serialize-qp "region__n" $region_n "scalar") (serialize-qp "site_id__n" $site_id_n "scalar") (serialize-qp "site__n" $site_n "scalar") (serialize-qp "device_id__n" $device_id_n "scalar") (serialize-qp "device__n" $device_n "scalar") (serialize-qp "tag__n" $tag_n "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
@@ -10076,7 +10079,6 @@ export def "dcim-rear-ports-list" [
 # POST /dcim/rear-ports/
 #
 # operationId: dcim_rear-ports_create
-# --cable shape: {label?: string}
 export def "dcim-rear-ports-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10094,7 +10096,7 @@ export def "dcim-rear-ports-create" [
   --positions: int
   --tags: list<string>
   type: string@type-completer-2
-]: any -> record<cable: record<id: int, label: string, url: string>, description: string, device: record<display_name: string, id: int, name: string, url: string>, id: int, name: string, positions: int, tags: list<string>, type: record<label: string, value: string>> {
+]: any -> oneof<record<cable: record<id: int, label: string, url: string>, description: string, device: record<display_name: string, id: int, name: string, url: string>, id: int, name: string, positions: int, tags: list<string>, type: record<label: string, value: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -10167,7 +10169,7 @@ export def "dcim-rear-ports-read" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<cable: record<id: int, label: string, url: string>, description: string, device: record<display_name: string, id: int, name: string, url: string>, id: int, name: string, positions: int, tags: list<string>, type: record<label: string, value: string>> {
+]: nothing -> oneof<record<cable: record<id: int, label: string, url: string>, description: string, device: record<display_name: string, id: int, name: string, url: string>, id: int, name: string, positions: int, tags: list<string>, type: record<label: string, value: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -10191,7 +10193,6 @@ export def "dcim-rear-ports-read" [
 # PATCH /dcim/rear-ports/{id}/
 #
 # operationId: dcim_rear-ports_partial_update
-# --cable shape: {label?: string}
 export def "dcim-rear-ports-partial-update" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -10210,7 +10211,7 @@ export def "dcim-rear-ports-partial-update" [
   --positions: int
   --tags: list<string>
   type: string@type-completer-2
-]: any -> record<cable: record<id: int, label: string, url: string>, description: string, device: record<display_name: string, id: int, name: string, url: string>, id: int, name: string, positions: int, tags: list<string>, type: record<label: string, value: string>> {
+]: any -> oneof<record<cable: record<id: int, label: string, url: string>, description: string, device: record<display_name: string, id: int, name: string, url: string>, id: int, name: string, positions: int, tags: list<string>, type: record<label: string, value: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -10237,7 +10238,6 @@ export def "dcim-rear-ports-partial-update" [
 # PUT /dcim/rear-ports/{id}/
 #
 # operationId: dcim_rear-ports_update
-# --cable shape: {label?: string}
 export def "dcim-rear-ports-update" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -10256,7 +10256,7 @@ export def "dcim-rear-ports-update" [
   --positions: int
   --tags: list<string>
   type: string@type-completer-2
-]: any -> record<cable: record<id: int, label: string, url: string>, description: string, device: record<display_name: string, id: int, name: string, url: string>, id: int, name: string, positions: int, tags: list<string>, type: record<label: string, value: string>> {
+]: any -> oneof<record<cable: record<id: int, label: string, url: string>, description: string, device: record<display_name: string, id: int, name: string, url: string>, id: int, name: string, positions: int, tags: list<string>, type: record<label: string, value: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -10295,7 +10295,7 @@ export def "dcim-rear-ports-trace" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<cable: record<id: int, label: string, url: string>, description: string, device: record<display_name: string, id: int, name: string, url: string>, id: int, name: string, positions: int, tags: list<string>, type: record<label: string, value: string>> {
+]: nothing -> oneof<record<cable: record<id: int, label: string, url: string>, description: string, device: record<display_name: string, id: int, name: string, url: string>, id: int, name: string, positions: int, tags: list<string>, type: record<label: string, value: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -10373,7 +10373,7 @@ export def "dcim-regions-list" [
   --parent-n: string
   --limit: int # Number of results to return per page.
   --offset: int # The initial index from which to return the results.
-]: nothing -> record<count: int, next: string, previous: string, results: table<description: string, id: int, name: string, parent: record, site_count: int, slug: string>> {
+]: nothing -> oneof<record<count: int, next: string, previous: string, results: table<description: string, id: int, name: string, parent: record, site_count: int, slug: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "slug" $slug "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "parent_id" $parent_id "scalar") (serialize-qp "parent" $parent "scalar") (serialize-qp "id__n" $id_n "scalar") (serialize-qp "id__lte" $id_lte "scalar") (serialize-qp "id__lt" $id_lt "scalar") (serialize-qp "id__gte" $id_gte "scalar") (serialize-qp "id__gt" $id_gt "scalar") (serialize-qp "name__n" $name_n "scalar") (serialize-qp "name__ic" $name_ic "scalar") (serialize-qp "name__nic" $name_nic "scalar") (serialize-qp "name__iew" $name_iew "scalar") (serialize-qp "name__niew" $name_niew "scalar") (serialize-qp "name__isw" $name_isw "scalar") (serialize-qp "name__nisw" $name_nisw "scalar") (serialize-qp "name__ie" $name_ie "scalar") (serialize-qp "name__nie" $name_nie "scalar") (serialize-qp "slug__n" $slug_n "scalar") (serialize-qp "slug__ic" $slug_ic "scalar") (serialize-qp "slug__nic" $slug_nic "scalar") (serialize-qp "slug__iew" $slug_iew "scalar") (serialize-qp "slug__niew" $slug_niew "scalar") (serialize-qp "slug__isw" $slug_isw "scalar") (serialize-qp "slug__nisw" $slug_nisw "scalar") (serialize-qp "slug__ie" $slug_ie "scalar") (serialize-qp "slug__nie" $slug_nie "scalar") (serialize-qp "description__n" $description_n "scalar") (serialize-qp "description__ic" $description_ic "scalar") (serialize-qp "description__nic" $description_nic "scalar") (serialize-qp "description__iew" $description_iew "scalar") (serialize-qp "description__niew" $description_niew "scalar") (serialize-qp "description__isw" $description_isw "scalar") (serialize-qp "description__nisw" $description_nisw "scalar") (serialize-qp "description__ie" $description_ie "scalar") (serialize-qp "description__nie" $description_nie "scalar") (serialize-qp "parent_id__n" $parent_id_n "scalar") (serialize-qp "parent__n" $parent_n "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
@@ -10411,7 +10411,7 @@ export def "dcim-regions-create" [
   name: string
   --parent: int # nullable
   slug: string # format: slug
-]: any -> record<description: string, id: int, name: string, parent: record<id: int, name: string, site_count: int, slug: string, url: string>, site_count: int, slug: string> {
+]: any -> oneof<record<description: string, id: int, name: string, parent: record<id: int, name: string, site_count: int, slug: string, url: string>, site_count: int, slug: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -10484,7 +10484,7 @@ export def "dcim-regions-read" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<description: string, id: int, name: string, parent: record<id: int, name: string, site_count: int, slug: string, url: string>, site_count: int, slug: string> {
+]: nothing -> oneof<record<description: string, id: int, name: string, parent: record<id: int, name: string, site_count: int, slug: string, url: string>, site_count: int, slug: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -10523,7 +10523,7 @@ export def "dcim-regions-partial-update" [
   name: string
   --parent: int # nullable
   slug: string # format: slug
-]: any -> record<description: string, id: int, name: string, parent: record<id: int, name: string, site_count: int, slug: string, url: string>, site_count: int, slug: string> {
+]: any -> oneof<record<description: string, id: int, name: string, parent: record<id: int, name: string, site_count: int, slug: string, url: string>, site_count: int, slug: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -10565,7 +10565,7 @@ export def "dcim-regions-update" [
   name: string
   --parent: int # nullable
   slug: string # format: slug
-]: any -> record<description: string, id: int, name: string, parent: record<id: int, name: string, site_count: int, slug: string, url: string>, site_count: int, slug: string> {
+]: any -> oneof<record<description: string, id: int, name: string, parent: record<id: int, name: string, site_count: int, slug: string, url: string>, site_count: int, slug: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -10712,7 +10712,7 @@ export def "dcim-sites-list" [
   --tag-n: string
   --limit: int # Number of results to return per page.
   --offset: int # The initial index from which to return the results.
-]: nothing -> record<count: int, next: string, previous: string, results: table<asn: int, circuit_count: int, comments: string, contact_email: string, contact_name: string, contact_phone: string, created: string, custom_fields: record, description: string, device_count: int, facility: string, id: int, last_updated: string, latitude: string, longitude: string, name: string, physical_address: string, prefix_count: int, rack_count: int, region: record, shipping_address: string, slug: string, status: record, tags: list, tenant: record, time_zone: string, virtualmachine_count: int, vlan_count: int>> {
+]: nothing -> oneof<record<count: int, next: string, previous: string, results: table<asn: int, circuit_count: int, comments: string, contact_email: string, contact_name: string, contact_phone: string, created: string, custom_fields: record, description: string, device_count: int, facility: string, id: int, last_updated: string, latitude: string, longitude: string, name: string, physical_address: string, prefix_count: int, rack_count: int, region: record, shipping_address: string, slug: string, status: record, tags: list, tenant: record, time_zone: string, virtualmachine_count: int, vlan_count: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "slug" $slug "scalar") (serialize-qp "facility" $facility "scalar") (serialize-qp "asn" $asn "scalar") (serialize-qp "latitude" $latitude "scalar") (serialize-qp "longitude" $longitude "scalar") (serialize-qp "contact_name" $contact_name "scalar") (serialize-qp "contact_phone" $contact_phone "scalar") (serialize-qp "contact_email" $contact_email "scalar") (serialize-qp "tenant_group_id" $tenant_group_id "scalar") (serialize-qp "tenant_group" $tenant_group "scalar") (serialize-qp "tenant_id" $tenant_id "scalar") (serialize-qp "tenant" $tenant "scalar") (serialize-qp "created" $created "scalar") (serialize-qp "created__gte" $created_gte "scalar") (serialize-qp "created__lte" $created_lte "scalar") (serialize-qp "last_updated" $last_updated "scalar") (serialize-qp "last_updated__gte" $last_updated_gte "scalar") (serialize-qp "last_updated__lte" $last_updated_lte "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "region_id" $region_id "scalar") (serialize-qp "region" $region "scalar") (serialize-qp "tag" $tag "scalar") (serialize-qp "id__n" $id_n "scalar") (serialize-qp "id__lte" $id_lte "scalar") (serialize-qp "id__lt" $id_lt "scalar") (serialize-qp "id__gte" $id_gte "scalar") (serialize-qp "id__gt" $id_gt "scalar") (serialize-qp "name__n" $name_n "scalar") (serialize-qp "name__ic" $name_ic "scalar") (serialize-qp "name__nic" $name_nic "scalar") (serialize-qp "name__iew" $name_iew "scalar") (serialize-qp "name__niew" $name_niew "scalar") (serialize-qp "name__isw" $name_isw "scalar") (serialize-qp "name__nisw" $name_nisw "scalar") (serialize-qp "name__ie" $name_ie "scalar") (serialize-qp "name__nie" $name_nie "scalar") (serialize-qp "slug__n" $slug_n "scalar") (serialize-qp "slug__ic" $slug_ic "scalar") (serialize-qp "slug__nic" $slug_nic "scalar") (serialize-qp "slug__iew" $slug_iew "scalar") (serialize-qp "slug__niew" $slug_niew "scalar") (serialize-qp "slug__isw" $slug_isw "scalar") (serialize-qp "slug__nisw" $slug_nisw "scalar") (serialize-qp "slug__ie" $slug_ie "scalar") (serialize-qp "slug__nie" $slug_nie "scalar") (serialize-qp "facility__n" $facility_n "scalar") (serialize-qp "facility__ic" $facility_ic "scalar") (serialize-qp "facility__nic" $facility_nic "scalar") (serialize-qp "facility__iew" $facility_iew "scalar") (serialize-qp "facility__niew" $facility_niew "scalar") (serialize-qp "facility__isw" $facility_isw "scalar") (serialize-qp "facility__nisw" $facility_nisw "scalar") (serialize-qp "facility__ie" $facility_ie "scalar") (serialize-qp "facility__nie" $facility_nie "scalar") (serialize-qp "asn__n" $asn_n "scalar") (serialize-qp "asn__lte" $asn_lte "scalar") (serialize-qp "asn__lt" $asn_lt "scalar") (serialize-qp "asn__gte" $asn_gte "scalar") (serialize-qp "asn__gt" $asn_gt "scalar") (serialize-qp "latitude__n" $latitude_n "scalar") (serialize-qp "latitude__lte" $latitude_lte "scalar") (serialize-qp "latitude__lt" $latitude_lt "scalar") (serialize-qp "latitude__gte" $latitude_gte "scalar") (serialize-qp "latitude__gt" $latitude_gt "scalar") (serialize-qp "longitude__n" $longitude_n "scalar") (serialize-qp "longitude__lte" $longitude_lte "scalar") (serialize-qp "longitude__lt" $longitude_lt "scalar") (serialize-qp "longitude__gte" $longitude_gte "scalar") (serialize-qp "longitude__gt" $longitude_gt "scalar") (serialize-qp "contact_name__n" $contact_name_n "scalar") (serialize-qp "contact_name__ic" $contact_name_ic "scalar") (serialize-qp "contact_name__nic" $contact_name_nic "scalar") (serialize-qp "contact_name__iew" $contact_name_iew "scalar") (serialize-qp "contact_name__niew" $contact_name_niew "scalar") (serialize-qp "contact_name__isw" $contact_name_isw "scalar") (serialize-qp "contact_name__nisw" $contact_name_nisw "scalar") (serialize-qp "contact_name__ie" $contact_name_ie "scalar") (serialize-qp "contact_name__nie" $contact_name_nie "scalar") (serialize-qp "contact_phone__n" $contact_phone_n "scalar") (serialize-qp "contact_phone__ic" $contact_phone_ic "scalar") (serialize-qp "contact_phone__nic" $contact_phone_nic "scalar") (serialize-qp "contact_phone__iew" $contact_phone_iew "scalar") (serialize-qp "contact_phone__niew" $contact_phone_niew "scalar") (serialize-qp "contact_phone__isw" $contact_phone_isw "scalar") (serialize-qp "contact_phone__nisw" $contact_phone_nisw "scalar") (serialize-qp "contact_phone__ie" $contact_phone_ie "scalar") (serialize-qp "contact_phone__nie" $contact_phone_nie "scalar") (serialize-qp "contact_email__n" $contact_email_n "scalar") (serialize-qp "contact_email__ic" $contact_email_ic "scalar") (serialize-qp "contact_email__nic" $contact_email_nic "scalar") (serialize-qp "contact_email__iew" $contact_email_iew "scalar") (serialize-qp "contact_email__niew" $contact_email_niew "scalar") (serialize-qp "contact_email__isw" $contact_email_isw "scalar") (serialize-qp "contact_email__nisw" $contact_email_nisw "scalar") (serialize-qp "contact_email__ie" $contact_email_ie "scalar") (serialize-qp "contact_email__nie" $contact_email_nie "scalar") (serialize-qp "tenant_group_id__n" $tenant_group_id_n "scalar") (serialize-qp "tenant_group__n" $tenant_group_n "scalar") (serialize-qp "tenant_id__n" $tenant_id_n "scalar") (serialize-qp "tenant__n" $tenant_n "scalar") (serialize-qp "status__n" $status_n "scalar") (serialize-qp "region_id__n" $region_id_n "scalar") (serialize-qp "region__n" $region_n "scalar") (serialize-qp "tag__n" $tag_n "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
@@ -10765,7 +10765,7 @@ export def "dcim-sites-create" [
   --tags: list<string>
   --tenant: int # nullable
   --time-zone: string
-]: any -> record<asn: int, circuit_count: int, comments: string, contact_email: string, contact_name: string, contact_phone: string, created: string, custom_fields: record, description: string, device_count: int, facility: string, id: int, last_updated: string, latitude: string, longitude: string, name: string, physical_address: string, prefix_count: int, rack_count: int, region: record<id: int, name: string, site_count: int, slug: string, url: string>, shipping_address: string, slug: string, status: record<label: string, value: string>, tags: list<string>, tenant: record<id: int, name: string, slug: string, url: string>, time_zone: string, virtualmachine_count: int, vlan_count: int> {
+]: any -> oneof<record<asn: int, circuit_count: int, comments: string, contact_email: string, contact_name: string, contact_phone: string, created: string, custom_fields: record, description: string, device_count: int, facility: string, id: int, last_updated: string, latitude: string, longitude: string, name: string, physical_address: string, prefix_count: int, rack_count: int, region: record<id: int, name: string, site_count: int, slug: string, url: string>, shipping_address: string, slug: string, status: record<label: string, value: string>, tags: list<string>, tenant: record<id: int, name: string, slug: string, url: string>, time_zone: string, virtualmachine_count: int, vlan_count: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -10838,7 +10838,7 @@ export def "dcim-sites-read" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<asn: int, circuit_count: int, comments: string, contact_email: string, contact_name: string, contact_phone: string, created: string, custom_fields: record, description: string, device_count: int, facility: string, id: int, last_updated: string, latitude: string, longitude: string, name: string, physical_address: string, prefix_count: int, rack_count: int, region: record<id: int, name: string, site_count: int, slug: string, url: string>, shipping_address: string, slug: string, status: record<label: string, value: string>, tags: list<string>, tenant: record<id: int, name: string, slug: string, url: string>, time_zone: string, virtualmachine_count: int, vlan_count: int> {
+]: nothing -> oneof<record<asn: int, circuit_count: int, comments: string, contact_email: string, contact_name: string, contact_phone: string, created: string, custom_fields: record, description: string, device_count: int, facility: string, id: int, last_updated: string, latitude: string, longitude: string, name: string, physical_address: string, prefix_count: int, rack_count: int, region: record<id: int, name: string, site_count: int, slug: string, url: string>, shipping_address: string, slug: string, status: record<label: string, value: string>, tags: list<string>, tenant: record<id: int, name: string, slug: string, url: string>, time_zone: string, virtualmachine_count: int, vlan_count: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -10892,7 +10892,7 @@ export def "dcim-sites-partial-update" [
   --tags: list<string>
   --tenant: int # nullable
   --time-zone: string
-]: any -> record<asn: int, circuit_count: int, comments: string, contact_email: string, contact_name: string, contact_phone: string, created: string, custom_fields: record, description: string, device_count: int, facility: string, id: int, last_updated: string, latitude: string, longitude: string, name: string, physical_address: string, prefix_count: int, rack_count: int, region: record<id: int, name: string, site_count: int, slug: string, url: string>, shipping_address: string, slug: string, status: record<label: string, value: string>, tags: list<string>, tenant: record<id: int, name: string, slug: string, url: string>, time_zone: string, virtualmachine_count: int, vlan_count: int> {
+]: any -> oneof<record<asn: int, circuit_count: int, comments: string, contact_email: string, contact_name: string, contact_phone: string, created: string, custom_fields: record, description: string, device_count: int, facility: string, id: int, last_updated: string, latitude: string, longitude: string, name: string, physical_address: string, prefix_count: int, rack_count: int, region: record<id: int, name: string, site_count: int, slug: string, url: string>, shipping_address: string, slug: string, status: record<label: string, value: string>, tags: list<string>, tenant: record<id: int, name: string, slug: string, url: string>, time_zone: string, virtualmachine_count: int, vlan_count: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -10949,7 +10949,7 @@ export def "dcim-sites-update" [
   --tags: list<string>
   --tenant: int # nullable
   --time-zone: string
-]: any -> record<asn: int, circuit_count: int, comments: string, contact_email: string, contact_name: string, contact_phone: string, created: string, custom_fields: record, description: string, device_count: int, facility: string, id: int, last_updated: string, latitude: string, longitude: string, name: string, physical_address: string, prefix_count: int, rack_count: int, region: record<id: int, name: string, site_count: int, slug: string, url: string>, shipping_address: string, slug: string, status: record<label: string, value: string>, tags: list<string>, tenant: record<id: int, name: string, slug: string, url: string>, time_zone: string, virtualmachine_count: int, vlan_count: int> {
+]: any -> oneof<record<asn: int, circuit_count: int, comments: string, contact_email: string, contact_name: string, contact_phone: string, created: string, custom_fields: record, description: string, device_count: int, facility: string, id: int, last_updated: string, latitude: string, longitude: string, name: string, physical_address: string, prefix_count: int, rack_count: int, region: record<id: int, name: string, site_count: int, slug: string, url: string>, shipping_address: string, slug: string, status: record<label: string, value: string>, tags: list<string>, tenant: record<id: int, name: string, slug: string, url: string>, time_zone: string, virtualmachine_count: int, vlan_count: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -10988,7 +10988,7 @@ export def "dcim-sites-graphs" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<asn: int, circuit_count: int, comments: string, contact_email: string, contact_name: string, contact_phone: string, created: string, custom_fields: record, description: string, device_count: int, facility: string, id: int, last_updated: string, latitude: string, longitude: string, name: string, physical_address: string, prefix_count: int, rack_count: int, region: record<id: int, name: string, site_count: int, slug: string, url: string>, shipping_address: string, slug: string, status: record<label: string, value: string>, tags: list<string>, tenant: record<id: int, name: string, slug: string, url: string>, time_zone: string, virtualmachine_count: int, vlan_count: int> {
+]: nothing -> oneof<record<asn: int, circuit_count: int, comments: string, contact_email: string, contact_name: string, contact_phone: string, created: string, custom_fields: record, description: string, device_count: int, facility: string, id: int, last_updated: string, latitude: string, longitude: string, name: string, physical_address: string, prefix_count: int, rack_count: int, region: record<id: int, name: string, site_count: int, slug: string, url: string>, shipping_address: string, slug: string, status: record<label: string, value: string>, tags: list<string>, tenant: record<id: int, name: string, slug: string, url: string>, time_zone: string, virtualmachine_count: int, vlan_count: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -11056,7 +11056,7 @@ export def "dcim-virtual-chassis-list" [
   --tag-n: string
   --limit: int # Number of results to return per page.
   --offset: int # The initial index from which to return the results.
-]: nothing -> record<count: int, next: string, previous: string, results: table<domain: string, id: int, master: record, member_count: int, tags: list>> {
+]: nothing -> oneof<record<count: int, next: string, previous: string, results: table<domain: string, id: int, master: record, member_count: int, tags: list>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "domain" $domain "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "region_id" $region_id "scalar") (serialize-qp "region" $region "scalar") (serialize-qp "site_id" $site_id "scalar") (serialize-qp "site" $site "scalar") (serialize-qp "tenant_id" $tenant_id "scalar") (serialize-qp "tenant" $tenant "scalar") (serialize-qp "tag" $tag "scalar") (serialize-qp "id__n" $id_n "scalar") (serialize-qp "id__lte" $id_lte "scalar") (serialize-qp "id__lt" $id_lt "scalar") (serialize-qp "id__gte" $id_gte "scalar") (serialize-qp "id__gt" $id_gt "scalar") (serialize-qp "domain__n" $domain_n "scalar") (serialize-qp "domain__ic" $domain_ic "scalar") (serialize-qp "domain__nic" $domain_nic "scalar") (serialize-qp "domain__iew" $domain_iew "scalar") (serialize-qp "domain__niew" $domain_niew "scalar") (serialize-qp "domain__isw" $domain_isw "scalar") (serialize-qp "domain__nisw" $domain_nisw "scalar") (serialize-qp "domain__ie" $domain_ie "scalar") (serialize-qp "domain__nie" $domain_nie "scalar") (serialize-qp "region_id__n" $region_id_n "scalar") (serialize-qp "region__n" $region_n "scalar") (serialize-qp "site_id__n" $site_id_n "scalar") (serialize-qp "site__n" $site_n "scalar") (serialize-qp "tenant_id__n" $tenant_id_n "scalar") (serialize-qp "tenant__n" $tenant_n "scalar") (serialize-qp "tag__n" $tag_n "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
@@ -11093,7 +11093,7 @@ export def "dcim-virtual-chassis-create" [
   --domain: string
   master: int
   --tags: list<string>
-]: any -> record<domain: string, id: int, master: record<display_name: string, id: int, name: string, url: string>, member_count: int, tags: list<string>> {
+]: any -> oneof<record<domain: string, id: int, master: record<display_name: string, id: int, name: string, url: string>, member_count: int, tags: list<string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -11166,7 +11166,7 @@ export def "dcim-virtual-chassis-read" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<domain: string, id: int, master: record<display_name: string, id: int, name: string, url: string>, member_count: int, tags: list<string>> {
+]: nothing -> oneof<record<domain: string, id: int, master: record<display_name: string, id: int, name: string, url: string>, member_count: int, tags: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -11204,7 +11204,7 @@ export def "dcim-virtual-chassis-partial-update" [
   --domain: string
   master: int
   --tags: list<string>
-]: any -> record<domain: string, id: int, master: record<display_name: string, id: int, name: string, url: string>, member_count: int, tags: list<string>> {
+]: any -> oneof<record<domain: string, id: int, master: record<display_name: string, id: int, name: string, url: string>, member_count: int, tags: list<string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -11245,7 +11245,7 @@ export def "dcim-virtual-chassis-update" [
   --domain: string
   master: int
   --tags: list<string>
-]: any -> record<domain: string, id: int, master: record<display_name: string, id: int, name: string, url: string>, member_count: int, tags: list<string>> {
+]: any -> oneof<record<domain: string, id: int, master: record<display_name: string, id: int, name: string, url: string>, member_count: int, tags: list<string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -11403,7 +11403,7 @@ export def "extras-config-contexts-list" [
   --tag-n: string
   --limit: int # Number of results to return per page.
   --offset: int # The initial index from which to return the results.
-]: nothing -> record<count: int, next: string, previous: string, results: table<cluster_groups: list, clusters: list, data: string, description: string, id: int, is_active: bool, name: string, platforms: list, regions: list, roles: list, sites: list, tags: list, tenant_groups: list, tenants: list, weight: int>> {
+]: nothing -> oneof<record<count: int, next: string, previous: string, results: table<cluster_groups: list, clusters: list, data: string, description: string, id: int, is_active: bool, name: string, platforms: list, regions: list, roles: list, sites: list, tags: list, tenant_groups: list, tenants: list, weight: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "is_active" $is_active "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "region_id" $region_id "scalar") (serialize-qp "region" $region "scalar") (serialize-qp "site_id" $site_id "scalar") (serialize-qp "site" $site "scalar") (serialize-qp "role_id" $role_id "scalar") (serialize-qp "role" $role "scalar") (serialize-qp "platform_id" $platform_id "scalar") (serialize-qp "platform" $platform "scalar") (serialize-qp "cluster_group_id" $cluster_group_id "scalar") (serialize-qp "cluster_group" $cluster_group "scalar") (serialize-qp "cluster_id" $cluster_id "scalar") (serialize-qp "tenant_group_id" $tenant_group_id "scalar") (serialize-qp "tenant_group" $tenant_group "scalar") (serialize-qp "tenant_id" $tenant_id "scalar") (serialize-qp "tenant" $tenant "scalar") (serialize-qp "tag" $tag "scalar") (serialize-qp "id__n" $id_n "scalar") (serialize-qp "id__lte" $id_lte "scalar") (serialize-qp "id__lt" $id_lt "scalar") (serialize-qp "id__gte" $id_gte "scalar") (serialize-qp "id__gt" $id_gt "scalar") (serialize-qp "name__n" $name_n "scalar") (serialize-qp "name__ic" $name_ic "scalar") (serialize-qp "name__nic" $name_nic "scalar") (serialize-qp "name__iew" $name_iew "scalar") (serialize-qp "name__niew" $name_niew "scalar") (serialize-qp "name__isw" $name_isw "scalar") (serialize-qp "name__nisw" $name_nisw "scalar") (serialize-qp "name__ie" $name_ie "scalar") (serialize-qp "name__nie" $name_nie "scalar") (serialize-qp "region_id__n" $region_id_n "scalar") (serialize-qp "region__n" $region_n "scalar") (serialize-qp "site_id__n" $site_id_n "scalar") (serialize-qp "site__n" $site_n "scalar") (serialize-qp "role_id__n" $role_id_n "scalar") (serialize-qp "role__n" $role_n "scalar") (serialize-qp "platform_id__n" $platform_id_n "scalar") (serialize-qp "platform__n" $platform_n "scalar") (serialize-qp "cluster_group_id__n" $cluster_group_id_n "scalar") (serialize-qp "cluster_group__n" $cluster_group_n "scalar") (serialize-qp "cluster_id__n" $cluster_id_n "scalar") (serialize-qp "tenant_group_id__n" $tenant_group_id_n "scalar") (serialize-qp "tenant_group__n" $tenant_group_n "scalar") (serialize-qp "tenant_id__n" $tenant_id_n "scalar") (serialize-qp "tenant__n" $tenant_n "scalar") (serialize-qp "tag__n" $tag_n "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
@@ -11451,7 +11451,7 @@ export def "extras-config-contexts-create" [
   --tenant-groups: list<int>
   --tenants: list<int>
   --weight: int
-]: any -> record<cluster_groups: table<cluster_count: int, id: int, name: string, slug: string, url: string>, clusters: table<id: int, name: string, url: string, virtualmachine_count: int>, data: string, description: string, id: int, is_active: bool, name: string, platforms: table<device_count: int, id: int, name: string, slug: string, url: string, virtualmachine_count: int>, regions: table<id: int, name: string, site_count: int, slug: string, url: string>, roles: table<device_count: int, id: int, name: string, slug: string, url: string, virtualmachine_count: int>, sites: table<id: int, name: string, slug: string, url: string>, tags: list<string>, tenant_groups: table<id: int, name: string, slug: string, tenant_count: int, url: string>, tenants: table<id: int, name: string, slug: string, url: string>, weight: int> {
+]: any -> oneof<record<cluster_groups: table<cluster_count: int, id: int, name: string, slug: string, url: string>, clusters: table<id: int, name: string, url: string, virtualmachine_count: int>, data: string, description: string, id: int, is_active: bool, name: string, platforms: table<device_count: int, id: int, name: string, slug: string, url: string, virtualmachine_count: int>, regions: table<id: int, name: string, site_count: int, slug: string, url: string>, roles: table<device_count: int, id: int, name: string, slug: string, url: string, virtualmachine_count: int>, sites: table<id: int, name: string, slug: string, url: string>, tags: list<string>, tenant_groups: table<id: int, name: string, slug: string, tenant_count: int, url: string>, tenants: table<id: int, name: string, slug: string, url: string>, weight: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -11524,7 +11524,7 @@ export def "extras-config-contexts-read" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<cluster_groups: table<cluster_count: int, id: int, name: string, slug: string, url: string>, clusters: table<id: int, name: string, url: string, virtualmachine_count: int>, data: string, description: string, id: int, is_active: bool, name: string, platforms: table<device_count: int, id: int, name: string, slug: string, url: string, virtualmachine_count: int>, regions: table<id: int, name: string, site_count: int, slug: string, url: string>, roles: table<device_count: int, id: int, name: string, slug: string, url: string, virtualmachine_count: int>, sites: table<id: int, name: string, slug: string, url: string>, tags: list<string>, tenant_groups: table<id: int, name: string, slug: string, tenant_count: int, url: string>, tenants: table<id: int, name: string, slug: string, url: string>, weight: int> {
+]: nothing -> oneof<record<cluster_groups: table<cluster_count: int, id: int, name: string, slug: string, url: string>, clusters: table<id: int, name: string, url: string, virtualmachine_count: int>, data: string, description: string, id: int, is_active: bool, name: string, platforms: table<device_count: int, id: int, name: string, slug: string, url: string, virtualmachine_count: int>, regions: table<id: int, name: string, site_count: int, slug: string, url: string>, roles: table<device_count: int, id: int, name: string, slug: string, url: string, virtualmachine_count: int>, sites: table<id: int, name: string, slug: string, url: string>, tags: list<string>, tenant_groups: table<id: int, name: string, slug: string, tenant_count: int, url: string>, tenants: table<id: int, name: string, slug: string, url: string>, weight: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -11573,7 +11573,7 @@ export def "extras-config-contexts-partial-update" [
   --tenant-groups: list<int>
   --tenants: list<int>
   --weight: int
-]: any -> record<cluster_groups: table<cluster_count: int, id: int, name: string, slug: string, url: string>, clusters: table<id: int, name: string, url: string, virtualmachine_count: int>, data: string, description: string, id: int, is_active: bool, name: string, platforms: table<device_count: int, id: int, name: string, slug: string, url: string, virtualmachine_count: int>, regions: table<id: int, name: string, site_count: int, slug: string, url: string>, roles: table<device_count: int, id: int, name: string, slug: string, url: string, virtualmachine_count: int>, sites: table<id: int, name: string, slug: string, url: string>, tags: list<string>, tenant_groups: table<id: int, name: string, slug: string, tenant_count: int, url: string>, tenants: table<id: int, name: string, slug: string, url: string>, weight: int> {
+]: any -> oneof<record<cluster_groups: table<cluster_count: int, id: int, name: string, slug: string, url: string>, clusters: table<id: int, name: string, url: string, virtualmachine_count: int>, data: string, description: string, id: int, is_active: bool, name: string, platforms: table<device_count: int, id: int, name: string, slug: string, url: string, virtualmachine_count: int>, regions: table<id: int, name: string, site_count: int, slug: string, url: string>, roles: table<device_count: int, id: int, name: string, slug: string, url: string, virtualmachine_count: int>, sites: table<id: int, name: string, slug: string, url: string>, tags: list<string>, tenant_groups: table<id: int, name: string, slug: string, tenant_count: int, url: string>, tenants: table<id: int, name: string, slug: string, url: string>, weight: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -11625,7 +11625,7 @@ export def "extras-config-contexts-update" [
   --tenant-groups: list<int>
   --tenants: list<int>
   --weight: int
-]: any -> record<cluster_groups: table<cluster_count: int, id: int, name: string, slug: string, url: string>, clusters: table<id: int, name: string, url: string, virtualmachine_count: int>, data: string, description: string, id: int, is_active: bool, name: string, platforms: table<device_count: int, id: int, name: string, slug: string, url: string, virtualmachine_count: int>, regions: table<id: int, name: string, site_count: int, slug: string, url: string>, roles: table<device_count: int, id: int, name: string, slug: string, url: string, virtualmachine_count: int>, sites: table<id: int, name: string, slug: string, url: string>, tags: list<string>, tenant_groups: table<id: int, name: string, slug: string, tenant_count: int, url: string>, tenants: table<id: int, name: string, slug: string, url: string>, weight: int> {
+]: any -> oneof<record<cluster_groups: table<cluster_count: int, id: int, name: string, slug: string, url: string>, clusters: table<id: int, name: string, url: string, virtualmachine_count: int>, data: string, description: string, id: int, is_active: bool, name: string, platforms: table<device_count: int, id: int, name: string, slug: string, url: string, virtualmachine_count: int>, regions: table<id: int, name: string, site_count: int, slug: string, url: string>, roles: table<device_count: int, id: int, name: string, slug: string, url: string, virtualmachine_count: int>, sites: table<id: int, name: string, slug: string, url: string>, tags: list<string>, tenant_groups: table<id: int, name: string, slug: string, tenant_count: int, url: string>, tenants: table<id: int, name: string, slug: string, url: string>, weight: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -11685,7 +11685,7 @@ export def "extras-export-templates-list" [
   --template-language-n: string
   --limit: int # Number of results to return per page.
   --offset: int # The initial index from which to return the results.
-]: nothing -> record<count: int, next: string, previous: string, results: table<content_type: string, description: string, file_extension: string, id: int, mime_type: string, name: string, template_code: string, template_language: record>> {
+]: nothing -> oneof<record<count: int, next: string, previous: string, results: table<content_type: string, description: string, file_extension: string, id: int, mime_type: string, name: string, template_code: string, template_language: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "content_type" $content_type "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "template_language" $template_language "scalar") (serialize-qp "id__n" $id_n "scalar") (serialize-qp "id__lte" $id_lte "scalar") (serialize-qp "id__lt" $id_lt "scalar") (serialize-qp "id__gte" $id_gte "scalar") (serialize-qp "id__gt" $id_gt "scalar") (serialize-qp "content_type__n" $content_type_n "scalar") (serialize-qp "name__n" $name_n "scalar") (serialize-qp "name__ic" $name_ic "scalar") (serialize-qp "name__nic" $name_nic "scalar") (serialize-qp "name__iew" $name_iew "scalar") (serialize-qp "name__niew" $name_niew "scalar") (serialize-qp "name__isw" $name_isw "scalar") (serialize-qp "name__nisw" $name_nisw "scalar") (serialize-qp "name__ie" $name_ie "scalar") (serialize-qp "name__nie" $name_nie "scalar") (serialize-qp "template_language__n" $template_language_n "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
@@ -11726,7 +11726,7 @@ export def "extras-export-templates-create" [
   name: string
   template_code: string # The list of objects being exported is passed as a context variable named queryset.
   --template-language: string@template-language-completer
-]: any -> record<content_type: string, description: string, file_extension: string, id: int, mime_type: string, name: string, template_code: string, template_language: record<label: string, value: string>> {
+]: any -> oneof<record<content_type: string, description: string, file_extension: string, id: int, mime_type: string, name: string, template_code: string, template_language: record<label: string, value: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -11799,7 +11799,7 @@ export def "extras-export-templates-read" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<content_type: string, description: string, file_extension: string, id: int, mime_type: string, name: string, template_code: string, template_language: record<label: string, value: string>> {
+]: nothing -> oneof<record<content_type: string, description: string, file_extension: string, id: int, mime_type: string, name: string, template_code: string, template_language: record<label: string, value: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -11841,7 +11841,7 @@ export def "extras-export-templates-partial-update" [
   name: string
   template_code: string # The list of objects being exported is passed as a context variable named queryset.
   --template-language: string@template-language-completer
-]: any -> record<content_type: string, description: string, file_extension: string, id: int, mime_type: string, name: string, template_code: string, template_language: record<label: string, value: string>> {
+]: any -> oneof<record<content_type: string, description: string, file_extension: string, id: int, mime_type: string, name: string, template_code: string, template_language: record<label: string, value: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -11886,7 +11886,7 @@ export def "extras-export-templates-update" [
   name: string
   template_code: string # The list of objects being exported is passed as a context variable named queryset.
   --template-language: string@template-language-completer
-]: any -> record<content_type: string, description: string, file_extension: string, id: int, mime_type: string, name: string, template_code: string, template_language: record<label: string, value: string>> {
+]: any -> oneof<record<content_type: string, description: string, file_extension: string, id: int, mime_type: string, name: string, template_code: string, template_language: record<label: string, value: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -11946,7 +11946,7 @@ export def "extras-graphs-list" [
   --template-language-n: string
   --limit: int # Number of results to return per page.
   --offset: int # The initial index from which to return the results.
-]: nothing -> record<count: int, next: string, previous: string, results: table<id: int, link: string, name: string, source: string, template_language: string, type: string, weight: int>> {
+]: nothing -> oneof<record<count: int, next: string, previous: string, results: table<id: int, link: string, name: string, source: string, template_language: string, type: string, weight: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "template_language" $template_language "scalar") (serialize-qp "id__n" $id_n "scalar") (serialize-qp "id__lte" $id_lte "scalar") (serialize-qp "id__lt" $id_lt "scalar") (serialize-qp "id__gte" $id_gte "scalar") (serialize-qp "id__gt" $id_gt "scalar") (serialize-qp "type__n" $type_n "scalar") (serialize-qp "name__n" $name_n "scalar") (serialize-qp "name__ic" $name_ic "scalar") (serialize-qp "name__nic" $name_nic "scalar") (serialize-qp "name__iew" $name_iew "scalar") (serialize-qp "name__niew" $name_niew "scalar") (serialize-qp "name__isw" $name_isw "scalar") (serialize-qp "name__nisw" $name_nisw "scalar") (serialize-qp "name__ie" $name_ie "scalar") (serialize-qp "name__nie" $name_nie "scalar") (serialize-qp "template_language__n" $template_language_n "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
@@ -11982,16 +11982,16 @@ export def "extras-graphs-create" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --link: string # format: uri
   name: string
-  --body-source: string
+  source: string
   --template-language: string@template-language-completer
   type: string
   --weight: int
-]: any -> record<id: int, link: string, name: string, source: string, template_language: string, type: string, weight: int> {
+]: any -> oneof<record<id: int, link: string, name: string, source: string, template_language: string, type: string, weight: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/extras/graphs/" $auth.query)
-  let req_body = {"link": $link, "name": $name, "source": $body_source, "template_language": $template_language, "type": $type, "weight": $weight} | compact
+  let req_body = {"link": $link, "name": $name, "source": $source, "template_language": $template_language, "type": $type, "weight": $weight} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -12059,7 +12059,7 @@ export def "extras-graphs-read" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<id: int, link: string, name: string, source: string, template_language: string, type: string, weight: int> {
+]: nothing -> oneof<record<id: int, link: string, name: string, source: string, template_language: string, type: string, weight: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -12096,17 +12096,17 @@ export def "extras-graphs-partial-update" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --link: string # format: uri
   name: string
-  --body-source: string
+  source: string
   --template-language: string@template-language-completer
   type: string
   --weight: int
-]: any -> record<id: int, link: string, name: string, source: string, template_language: string, type: string, weight: int> {
+]: any -> oneof<record<id: int, link: string, name: string, source: string, template_language: string, type: string, weight: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/extras/graphs/{id}/") $auth.query)
-  let req_body = {"link": $link, "name": $name, "source": $body_source, "template_language": $template_language, "type": $type, "weight": $weight} | compact
+  let req_body = {"link": $link, "name": $name, "source": $source, "template_language": $template_language, "type": $type, "weight": $weight} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -12140,17 +12140,17 @@ export def "extras-graphs-update" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --link: string # format: uri
   name: string
-  --body-source: string
+  source: string
   --template-language: string@template-language-completer
   type: string
   --weight: int
-]: any -> record<id: int, link: string, name: string, source: string, template_language: string, type: string, weight: int> {
+]: any -> oneof<record<id: int, link: string, name: string, source: string, template_language: string, type: string, weight: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/extras/graphs/{id}/") $auth.query)
-  let req_body = {"link": $link, "name": $name, "source": $body_source, "template_language": $template_language, "type": $type, "weight": $weight} | compact
+  let req_body = {"link": $link, "name": $name, "source": $source, "template_language": $template_language, "type": $type, "weight": $weight} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -12184,7 +12184,7 @@ export def "extras-image-attachments-list" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Number of results to return per page.
   --offset: int # The initial index from which to return the results.
-]: nothing -> record<count: int, next: string, previous: string, results: table<content_type: string, created: string, id: int, image: string, image_height: int, image_width: int, name: string, object_id: int, parent: record>> {
+]: nothing -> oneof<record<count: int, next: string, previous: string, results: table<content_type: string, created: string, id: int, image: string, image_height: int, image_width: int, name: string, object_id: int, parent: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
@@ -12223,7 +12223,7 @@ export def "extras-image-attachments-create" [
   image_width: int
   --name: string
   object_id: int
-]: any -> record<content_type: string, created: string, id: int, image: string, image_height: int, image_width: int, name: string, object_id: int, parent: record> {
+]: any -> oneof<record<content_type: string, created: string, id: int, image: string, image_height: int, image_width: int, name: string, object_id: int, parent: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -12296,7 +12296,7 @@ export def "extras-image-attachments-read" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<content_type: string, created: string, id: int, image: string, image_height: int, image_width: int, name: string, object_id: int, parent: record> {
+]: nothing -> oneof<record<content_type: string, created: string, id: int, image: string, image_height: int, image_width: int, name: string, object_id: int, parent: record>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -12336,7 +12336,7 @@ export def "extras-image-attachments-partial-update" [
   image_width: int
   --name: string
   object_id: int
-]: any -> record<content_type: string, created: string, id: int, image: string, image_height: int, image_width: int, name: string, object_id: int, parent: record> {
+]: any -> oneof<record<content_type: string, created: string, id: int, image: string, image_height: int, image_width: int, name: string, object_id: int, parent: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -12379,7 +12379,7 @@ export def "extras-image-attachments-update" [
   image_width: int
   --name: string
   object_id: int
-]: any -> record<content_type: string, created: string, id: int, image: string, image_height: int, image_width: int, name: string, object_id: int, parent: record> {
+]: any -> oneof<record<content_type: string, created: string, id: int, image: string, image_height: int, image_width: int, name: string, object_id: int, parent: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -12460,7 +12460,7 @@ export def "extras-object-changes-list" [
   --object-repr-nie: string
   --limit: int # Number of results to return per page.
   --offset: int # The initial index from which to return the results.
-]: nothing -> record<count: int, next: string, previous: string, results: table<action: record, changed_object: record, changed_object_id: int, changed_object_type: string, id: int, object_data: string, request_id: string, time: string, user: record, user_name: string>> {
+]: nothing -> oneof<record<count: int, next: string, previous: string, results: table<action: record, changed_object: record, changed_object_id: int, changed_object_type: string, id: int, object_data: string, request_id: string, time: string, user: record, user_name: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "user" $user "scalar") (serialize-qp "user_name" $user_name "scalar") (serialize-qp "request_id" $request_id "scalar") (serialize-qp "action" $action "scalar") (serialize-qp "changed_object_type" $changed_object_type "scalar") (serialize-qp "changed_object_id" $changed_object_id "scalar") (serialize-qp "object_repr" $object_repr "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "time" $time "scalar") (serialize-qp "id__n" $id_n "scalar") (serialize-qp "id__lte" $id_lte "scalar") (serialize-qp "id__lt" $id_lt "scalar") (serialize-qp "id__gte" $id_gte "scalar") (serialize-qp "id__gt" $id_gt "scalar") (serialize-qp "user__n" $user_n "scalar") (serialize-qp "user_name__n" $user_name_n "scalar") (serialize-qp "user_name__ic" $user_name_ic "scalar") (serialize-qp "user_name__nic" $user_name_nic "scalar") (serialize-qp "user_name__iew" $user_name_iew "scalar") (serialize-qp "user_name__niew" $user_name_niew "scalar") (serialize-qp "user_name__isw" $user_name_isw "scalar") (serialize-qp "user_name__nisw" $user_name_nisw "scalar") (serialize-qp "user_name__ie" $user_name_ie "scalar") (serialize-qp "user_name__nie" $user_name_nie "scalar") (serialize-qp "action__n" $action_n "scalar") (serialize-qp "changed_object_type__n" $changed_object_type_n "scalar") (serialize-qp "changed_object_id__n" $changed_object_id_n "scalar") (serialize-qp "changed_object_id__lte" $changed_object_id_lte "scalar") (serialize-qp "changed_object_id__lt" $changed_object_id_lt "scalar") (serialize-qp "changed_object_id__gte" $changed_object_id_gte "scalar") (serialize-qp "changed_object_id__gt" $changed_object_id_gt "scalar") (serialize-qp "object_repr__n" $object_repr_n "scalar") (serialize-qp "object_repr__ic" $object_repr_ic "scalar") (serialize-qp "object_repr__nic" $object_repr_nic "scalar") (serialize-qp "object_repr__iew" $object_repr_iew "scalar") (serialize-qp "object_repr__niew" $object_repr_niew "scalar") (serialize-qp "object_repr__isw" $object_repr_isw "scalar") (serialize-qp "object_repr__nisw" $object_repr_nisw "scalar") (serialize-qp "object_repr__ie" $object_repr_ie "scalar") (serialize-qp "object_repr__nie" $object_repr_nie "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
@@ -12496,7 +12496,7 @@ export def "extras-object-changes-read" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<action: record<label: string, value: string>, changed_object: record, changed_object_id: int, changed_object_type: string, id: int, object_data: string, request_id: string, time: string, user: record<id: int, username: string>, user_name: string> {
+]: nothing -> oneof<record<action: record<label: string, value: string>, changed_object: record, changed_object_id: int, changed_object_type: string, id: int, object_data: string, request_id: string, time: string, user: record<id: int, username: string>, user_name: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -12744,7 +12744,7 @@ export def "extras-tags-list" [
   --color-nie: string
   --limit: int # Number of results to return per page.
   --offset: int # The initial index from which to return the results.
-]: nothing -> record<count: int, next: string, previous: string, results: table<color: string, description: string, id: int, name: string, slug: string, tagged_items: int>> {
+]: nothing -> oneof<record<count: int, next: string, previous: string, results: table<color: string, description: string, id: int, name: string, slug: string, tagged_items: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "slug" $slug "scalar") (serialize-qp "color" $color "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "id__n" $id_n "scalar") (serialize-qp "id__lte" $id_lte "scalar") (serialize-qp "id__lt" $id_lt "scalar") (serialize-qp "id__gte" $id_gte "scalar") (serialize-qp "id__gt" $id_gt "scalar") (serialize-qp "name__n" $name_n "scalar") (serialize-qp "name__ic" $name_ic "scalar") (serialize-qp "name__nic" $name_nic "scalar") (serialize-qp "name__iew" $name_iew "scalar") (serialize-qp "name__niew" $name_niew "scalar") (serialize-qp "name__isw" $name_isw "scalar") (serialize-qp "name__nisw" $name_nisw "scalar") (serialize-qp "name__ie" $name_ie "scalar") (serialize-qp "name__nie" $name_nie "scalar") (serialize-qp "slug__n" $slug_n "scalar") (serialize-qp "slug__ic" $slug_ic "scalar") (serialize-qp "slug__nic" $slug_nic "scalar") (serialize-qp "slug__iew" $slug_iew "scalar") (serialize-qp "slug__niew" $slug_niew "scalar") (serialize-qp "slug__isw" $slug_isw "scalar") (serialize-qp "slug__nisw" $slug_nisw "scalar") (serialize-qp "slug__ie" $slug_ie "scalar") (serialize-qp "slug__nie" $slug_nie "scalar") (serialize-qp "color__n" $color_n "scalar") (serialize-qp "color__ic" $color_ic "scalar") (serialize-qp "color__nic" $color_nic "scalar") (serialize-qp "color__iew" $color_iew "scalar") (serialize-qp "color__niew" $color_niew "scalar") (serialize-qp "color__isw" $color_isw "scalar") (serialize-qp "color__nisw" $color_nisw "scalar") (serialize-qp "color__ie" $color_ie "scalar") (serialize-qp "color__nie" $color_nie "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
@@ -12782,7 +12782,7 @@ export def "extras-tags-create" [
   --description: string
   name: string
   slug: string # format: slug
-]: any -> record<color: string, description: string, id: int, name: string, slug: string, tagged_items: int> {
+]: any -> oneof<record<color: string, description: string, id: int, name: string, slug: string, tagged_items: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -12855,7 +12855,7 @@ export def "extras-tags-read" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<color: string, description: string, id: int, name: string, slug: string, tagged_items: int> {
+]: nothing -> oneof<record<color: string, description: string, id: int, name: string, slug: string, tagged_items: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -12894,7 +12894,7 @@ export def "extras-tags-partial-update" [
   --description: string
   name: string
   slug: string # format: slug
-]: any -> record<color: string, description: string, id: int, name: string, slug: string, tagged_items: int> {
+]: any -> oneof<record<color: string, description: string, id: int, name: string, slug: string, tagged_items: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -12936,7 +12936,7 @@ export def "extras-tags-update" [
   --description: string
   name: string
   slug: string # format: slug
-]: any -> record<color: string, description: string, id: int, name: string, slug: string, tagged_items: int> {
+]: any -> oneof<record<color: string, description: string, id: int, name: string, slug: string, tagged_items: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -13003,7 +13003,7 @@ export def "ipam-aggregates-list" [
   --tag-n: string
   --limit: int # Number of results to return per page.
   --offset: int # The initial index from which to return the results.
-]: nothing -> record<count: int, next: string, previous: string, results: table<created: string, custom_fields: record, date_added: string, description: string, family: record, id: int, last_updated: string, prefix: string, rir: record, tags: list>> {
+]: nothing -> oneof<record<count: int, next: string, previous: string, results: table<created: string, custom_fields: record, date_added: string, description: string, family: record, id: int, last_updated: string, prefix: string, rir: record, tags: list>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "date_added" $date_added "scalar") (serialize-qp "created" $created "scalar") (serialize-qp "created__gte" $created_gte "scalar") (serialize-qp "created__lte" $created_lte "scalar") (serialize-qp "last_updated" $last_updated "scalar") (serialize-qp "last_updated__gte" $last_updated_gte "scalar") (serialize-qp "last_updated__lte" $last_updated_lte "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "family" $family "scalar") (serialize-qp "prefix" $prefix "scalar") (serialize-qp "rir_id" $rir_id "scalar") (serialize-qp "rir" $rir "scalar") (serialize-qp "tag" $tag "scalar") (serialize-qp "id__n" $id_n "scalar") (serialize-qp "id__lte" $id_lte "scalar") (serialize-qp "id__lt" $id_lt "scalar") (serialize-qp "id__gte" $id_gte "scalar") (serialize-qp "id__gt" $id_gt "scalar") (serialize-qp "date_added__n" $date_added_n "scalar") (serialize-qp "date_added__lte" $date_added_lte "scalar") (serialize-qp "date_added__lt" $date_added_lt "scalar") (serialize-qp "date_added__gte" $date_added_gte "scalar") (serialize-qp "date_added__gt" $date_added_gt "scalar") (serialize-qp "rir_id__n" $rir_id_n "scalar") (serialize-qp "rir__n" $rir_n "scalar") (serialize-qp "tag__n" $tag_n "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
@@ -13043,7 +13043,7 @@ export def "ipam-aggregates-create" [
   prefix: string
   rir: int
   --tags: list<string>
-]: any -> record<created: string, custom_fields: record, date_added: string, description: string, family: record<label: string, value: int>, id: int, last_updated: string, prefix: string, rir: record<aggregate_count: int, id: int, name: string, slug: string, url: string>, tags: list<string>> {
+]: any -> oneof<record<created: string, custom_fields: record, date_added: string, description: string, family: record<label: string, value: int>, id: int, last_updated: string, prefix: string, rir: record<aggregate_count: int, id: int, name: string, slug: string, url: string>, tags: list<string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -13116,7 +13116,7 @@ export def "ipam-aggregates-read" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<created: string, custom_fields: record, date_added: string, description: string, family: record<label: string, value: int>, id: int, last_updated: string, prefix: string, rir: record<aggregate_count: int, id: int, name: string, slug: string, url: string>, tags: list<string>> {
+]: nothing -> oneof<record<created: string, custom_fields: record, date_added: string, description: string, family: record<label: string, value: int>, id: int, last_updated: string, prefix: string, rir: record<aggregate_count: int, id: int, name: string, slug: string, url: string>, tags: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -13157,7 +13157,7 @@ export def "ipam-aggregates-partial-update" [
   prefix: string
   rir: int
   --tags: list<string>
-]: any -> record<created: string, custom_fields: record, date_added: string, description: string, family: record<label: string, value: int>, id: int, last_updated: string, prefix: string, rir: record<aggregate_count: int, id: int, name: string, slug: string, url: string>, tags: list<string>> {
+]: any -> oneof<record<created: string, custom_fields: record, date_added: string, description: string, family: record<label: string, value: int>, id: int, last_updated: string, prefix: string, rir: record<aggregate_count: int, id: int, name: string, slug: string, url: string>, tags: list<string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -13201,7 +13201,7 @@ export def "ipam-aggregates-update" [
   prefix: string
   rir: int
   --tags: list<string>
-]: any -> record<created: string, custom_fields: record, date_added: string, description: string, family: record<label: string, value: int>, id: int, last_updated: string, prefix: string, rir: record<aggregate_count: int, id: int, name: string, slug: string, url: string>, tags: list<string>> {
+]: any -> oneof<record<created: string, custom_fields: record, date_added: string, description: string, family: record<label: string, value: int>, id: int, last_updated: string, prefix: string, rir: record<aggregate_count: int, id: int, name: string, slug: string, url: string>, tags: list<string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -13297,7 +13297,7 @@ export def "ipam-ip-addresses-list" [
   --tag-n: string
   --limit: int # Number of results to return per page.
   --offset: int # The initial index from which to return the results.
-]: nothing -> record<count: int, next: string, previous: string, results: table<address: string, created: string, custom_fields: record, description: string, dns_name: string, family: record, id: int, interface: record, last_updated: string, nat_inside: record, nat_outside: record, role: record, status: record, tags: list, tenant: record, vrf: record>> {
+]: nothing -> oneof<record<count: int, next: string, previous: string, results: table<address: string, created: string, custom_fields: record, description: string, dns_name: string, family: record, id: int, interface: record, last_updated: string, nat_inside: record, nat_outside: record, role: record, status: record, tags: list, tenant: record, vrf: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "dns_name" $dns_name "scalar") (serialize-qp "tenant_group_id" $tenant_group_id "scalar") (serialize-qp "tenant_group" $tenant_group "scalar") (serialize-qp "tenant_id" $tenant_id "scalar") (serialize-qp "tenant" $tenant "scalar") (serialize-qp "created" $created "scalar") (serialize-qp "created__gte" $created_gte "scalar") (serialize-qp "created__lte" $created_lte "scalar") (serialize-qp "last_updated" $last_updated "scalar") (serialize-qp "last_updated__gte" $last_updated_gte "scalar") (serialize-qp "last_updated__lte" $last_updated_lte "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "family" $family "scalar") (serialize-qp "parent" $parent "scalar") (serialize-qp "address" $address "scalar") (serialize-qp "mask_length" $mask_length "scalar") (serialize-qp "vrf_id" $vrf_id "scalar") (serialize-qp "vrf" $vrf "scalar") (serialize-qp "device" $device "scalar") (serialize-qp "device_id" $device_id "scalar") (serialize-qp "virtual_machine_id" $virtual_machine_id "scalar") (serialize-qp "virtual_machine" $virtual_machine "scalar") (serialize-qp "interface" $interface "scalar") (serialize-qp "interface_id" $interface_id "scalar") (serialize-qp "assigned_to_interface" $assigned_to_interface "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "role" $role "scalar") (serialize-qp "tag" $tag "scalar") (serialize-qp "id__n" $id_n "scalar") (serialize-qp "id__lte" $id_lte "scalar") (serialize-qp "id__lt" $id_lt "scalar") (serialize-qp "id__gte" $id_gte "scalar") (serialize-qp "id__gt" $id_gt "scalar") (serialize-qp "dns_name__n" $dns_name_n "scalar") (serialize-qp "dns_name__ic" $dns_name_ic "scalar") (serialize-qp "dns_name__nic" $dns_name_nic "scalar") (serialize-qp "dns_name__iew" $dns_name_iew "scalar") (serialize-qp "dns_name__niew" $dns_name_niew "scalar") (serialize-qp "dns_name__isw" $dns_name_isw "scalar") (serialize-qp "dns_name__nisw" $dns_name_nisw "scalar") (serialize-qp "dns_name__ie" $dns_name_ie "scalar") (serialize-qp "dns_name__nie" $dns_name_nie "scalar") (serialize-qp "tenant_group_id__n" $tenant_group_id_n "scalar") (serialize-qp "tenant_group__n" $tenant_group_n "scalar") (serialize-qp "tenant_id__n" $tenant_id_n "scalar") (serialize-qp "tenant__n" $tenant_n "scalar") (serialize-qp "vrf_id__n" $vrf_id_n "scalar") (serialize-qp "vrf__n" $vrf_n "scalar") (serialize-qp "virtual_machine_id__n" $virtual_machine_id_n "scalar") (serialize-qp "virtual_machine__n" $virtual_machine_n "scalar") (serialize-qp "interface__n" $interface_n "scalar") (serialize-qp "interface_id__n" $interface_id_n "scalar") (serialize-qp "status__n" $status_n "scalar") (serialize-qp "role__n" $role_n "scalar") (serialize-qp "tag__n" $tag_n "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
@@ -13343,7 +13343,7 @@ export def "ipam-ip-addresses-create" [
   --tags: list<string>
   --tenant: int # nullable
   --vrf: int # nullable
-]: any -> record<address: string, created: string, custom_fields: record, description: string, dns_name: string, family: record<label: string, value: int>, id: int, interface: record<device: record<display_name: string, id: int, name: string, url: string>, id: int, name: string, url: string, virtual_machine: record<id: int, name: string, url: string>>, last_updated: string, nat_inside: record<address: string, family: string, id: int, url: string>, nat_outside: record<address: string, family: string, id: int, url: string>, role: record<label: string, value: string>, status: record<label: string, value: string>, tags: list<string>, tenant: record<id: int, name: string, slug: string, url: string>, vrf: record<id: int, name: string, prefix_count: int, rd: string, url: string>> {
+]: any -> oneof<record<address: string, created: string, custom_fields: record, description: string, dns_name: string, family: record<label: string, value: int>, id: int, interface: record<device: record<display_name: string, id: int, name: string, url: string>, id: int, name: string, url: string, virtual_machine: record<id: int, name: string, url: string>>, last_updated: string, nat_inside: record<address: string, family: string, id: int, url: string>, nat_outside: record<address: string, family: string, id: int, url: string>, role: record<label: string, value: string>, status: record<label: string, value: string>, tags: list<string>, tenant: record<id: int, name: string, slug: string, url: string>, vrf: record<id: int, name: string, prefix_count: int, rd: string, url: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -13416,7 +13416,7 @@ export def "ipam-ip-addresses-read" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<address: string, created: string, custom_fields: record, description: string, dns_name: string, family: record<label: string, value: int>, id: int, interface: record<device: record<display_name: string, id: int, name: string, url: string>, id: int, name: string, url: string, virtual_machine: record<id: int, name: string, url: string>>, last_updated: string, nat_inside: record<address: string, family: string, id: int, url: string>, nat_outside: record<address: string, family: string, id: int, url: string>, role: record<label: string, value: string>, status: record<label: string, value: string>, tags: list<string>, tenant: record<id: int, name: string, slug: string, url: string>, vrf: record<id: int, name: string, prefix_count: int, rd: string, url: string>> {
+]: nothing -> oneof<record<address: string, created: string, custom_fields: record, description: string, dns_name: string, family: record<label: string, value: int>, id: int, interface: record<device: record<display_name: string, id: int, name: string, url: string>, id: int, name: string, url: string, virtual_machine: record<id: int, name: string, url: string>>, last_updated: string, nat_inside: record<address: string, family: string, id: int, url: string>, nat_outside: record<address: string, family: string, id: int, url: string>, role: record<label: string, value: string>, status: record<label: string, value: string>, tags: list<string>, tenant: record<id: int, name: string, slug: string, url: string>, vrf: record<id: int, name: string, prefix_count: int, rd: string, url: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -13463,7 +13463,7 @@ export def "ipam-ip-addresses-partial-update" [
   --tags: list<string>
   --tenant: int # nullable
   --vrf: int # nullable
-]: any -> record<address: string, created: string, custom_fields: record, description: string, dns_name: string, family: record<label: string, value: int>, id: int, interface: record<device: record<display_name: string, id: int, name: string, url: string>, id: int, name: string, url: string, virtual_machine: record<id: int, name: string, url: string>>, last_updated: string, nat_inside: record<address: string, family: string, id: int, url: string>, nat_outside: record<address: string, family: string, id: int, url: string>, role: record<label: string, value: string>, status: record<label: string, value: string>, tags: list<string>, tenant: record<id: int, name: string, slug: string, url: string>, vrf: record<id: int, name: string, prefix_count: int, rd: string, url: string>> {
+]: any -> oneof<record<address: string, created: string, custom_fields: record, description: string, dns_name: string, family: record<label: string, value: int>, id: int, interface: record<device: record<display_name: string, id: int, name: string, url: string>, id: int, name: string, url: string, virtual_machine: record<id: int, name: string, url: string>>, last_updated: string, nat_inside: record<address: string, family: string, id: int, url: string>, nat_outside: record<address: string, family: string, id: int, url: string>, role: record<label: string, value: string>, status: record<label: string, value: string>, tags: list<string>, tenant: record<id: int, name: string, slug: string, url: string>, vrf: record<id: int, name: string, prefix_count: int, rd: string, url: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -13513,7 +13513,7 @@ export def "ipam-ip-addresses-update" [
   --tags: list<string>
   --tenant: int # nullable
   --vrf: int # nullable
-]: any -> record<address: string, created: string, custom_fields: record, description: string, dns_name: string, family: record<label: string, value: int>, id: int, interface: record<device: record<display_name: string, id: int, name: string, url: string>, id: int, name: string, url: string, virtual_machine: record<id: int, name: string, url: string>>, last_updated: string, nat_inside: record<address: string, family: string, id: int, url: string>, nat_outside: record<address: string, family: string, id: int, url: string>, role: record<label: string, value: string>, status: record<label: string, value: string>, tags: list<string>, tenant: record<id: int, name: string, slug: string, url: string>, vrf: record<id: int, name: string, prefix_count: int, rd: string, url: string>> {
+]: any -> oneof<record<address: string, created: string, custom_fields: record, description: string, dns_name: string, family: record<label: string, value: int>, id: int, interface: record<device: record<display_name: string, id: int, name: string, url: string>, id: int, name: string, url: string, virtual_machine: record<id: int, name: string, url: string>>, last_updated: string, nat_inside: record<address: string, family: string, id: int, url: string>, nat_outside: record<address: string, family: string, id: int, url: string>, role: record<label: string, value: string>, status: record<label: string, value: string>, tags: list<string>, tenant: record<id: int, name: string, slug: string, url: string>, vrf: record<id: int, name: string, prefix_count: int, rd: string, url: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -13604,7 +13604,7 @@ export def "ipam-prefixes-list" [
   --tag-n: string
   --limit: int # Number of results to return per page.
   --offset: int # The initial index from which to return the results.
-]: nothing -> record<count: int, next: string, previous: string, results: table<created: string, custom_fields: record, description: string, family: record, id: int, is_pool: bool, last_updated: string, prefix: string, role: record, site: record, status: record, tags: list, tenant: record, vlan: record, vrf: record>> {
+]: nothing -> oneof<record<count: int, next: string, previous: string, results: table<created: string, custom_fields: record, description: string, family: record, id: int, is_pool: bool, last_updated: string, prefix: string, role: record, site: record, status: record, tags: list, tenant: record, vlan: record, vrf: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "is_pool" $is_pool "scalar") (serialize-qp "tenant_group_id" $tenant_group_id "scalar") (serialize-qp "tenant_group" $tenant_group "scalar") (serialize-qp "tenant_id" $tenant_id "scalar") (serialize-qp "tenant" $tenant "scalar") (serialize-qp "created" $created "scalar") (serialize-qp "created__gte" $created_gte "scalar") (serialize-qp "created__lte" $created_lte "scalar") (serialize-qp "last_updated" $last_updated "scalar") (serialize-qp "last_updated__gte" $last_updated_gte "scalar") (serialize-qp "last_updated__lte" $last_updated_lte "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "family" $family "scalar") (serialize-qp "prefix" $prefix "scalar") (serialize-qp "within" $within "scalar") (serialize-qp "within_include" $within_include "scalar") (serialize-qp "contains" $contains "scalar") (serialize-qp "mask_length" $mask_length "scalar") (serialize-qp "vrf_id" $vrf_id "scalar") (serialize-qp "vrf" $vrf "scalar") (serialize-qp "region_id" $region_id "scalar") (serialize-qp "region" $region "scalar") (serialize-qp "site_id" $site_id "scalar") (serialize-qp "site" $site "scalar") (serialize-qp "vlan_id" $vlan_id "scalar") (serialize-qp "vlan_vid" $vlan_vid "scalar") (serialize-qp "role_id" $role_id "scalar") (serialize-qp "role" $role "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "tag" $tag "scalar") (serialize-qp "id__n" $id_n "scalar") (serialize-qp "id__lte" $id_lte "scalar") (serialize-qp "id__lt" $id_lt "scalar") (serialize-qp "id__gte" $id_gte "scalar") (serialize-qp "id__gt" $id_gt "scalar") (serialize-qp "tenant_group_id__n" $tenant_group_id_n "scalar") (serialize-qp "tenant_group__n" $tenant_group_n "scalar") (serialize-qp "tenant_id__n" $tenant_id_n "scalar") (serialize-qp "tenant__n" $tenant_n "scalar") (serialize-qp "vrf_id__n" $vrf_id_n "scalar") (serialize-qp "vrf__n" $vrf_n "scalar") (serialize-qp "region_id__n" $region_id_n "scalar") (serialize-qp "region__n" $region_n "scalar") (serialize-qp "site_id__n" $site_id_n "scalar") (serialize-qp "site__n" $site_n "scalar") (serialize-qp "vlan_id__n" $vlan_id_n "scalar") (serialize-qp "role_id__n" $role_id_n "scalar") (serialize-qp "role__n" $role_n "scalar") (serialize-qp "status__n" $status_n "scalar") (serialize-qp "tag__n" $tag_n "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
@@ -13649,7 +13649,7 @@ export def "ipam-prefixes-create" [
   --tenant: int # nullable
   --vlan: int # nullable
   --vrf: int # nullable
-]: any -> record<created: string, custom_fields: record, description: string, family: record<label: string, value: int>, id: int, is_pool: bool, last_updated: string, prefix: string, role: record<id: int, name: string, prefix_count: int, slug: string, url: string, vlan_count: int>, site: record<id: int, name: string, slug: string, url: string>, status: record<label: string, value: string>, tags: list<string>, tenant: record<id: int, name: string, slug: string, url: string>, vlan: record<display_name: string, id: int, name: string, url: string, vid: int>, vrf: record<id: int, name: string, prefix_count: int, rd: string, url: string>> {
+]: any -> oneof<record<created: string, custom_fields: record, description: string, family: record<label: string, value: int>, id: int, is_pool: bool, last_updated: string, prefix: string, role: record<id: int, name: string, prefix_count: int, slug: string, url: string, vlan_count: int>, site: record<id: int, name: string, slug: string, url: string>, status: record<label: string, value: string>, tags: list<string>, tenant: record<id: int, name: string, slug: string, url: string>, vlan: record<display_name: string, id: int, name: string, url: string, vid: int>, vrf: record<id: int, name: string, prefix_count: int, rd: string, url: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -13722,7 +13722,7 @@ export def "ipam-prefixes-read" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<created: string, custom_fields: record, description: string, family: record<label: string, value: int>, id: int, is_pool: bool, last_updated: string, prefix: string, role: record<id: int, name: string, prefix_count: int, slug: string, url: string, vlan_count: int>, site: record<id: int, name: string, slug: string, url: string>, status: record<label: string, value: string>, tags: list<string>, tenant: record<id: int, name: string, slug: string, url: string>, vlan: record<display_name: string, id: int, name: string, url: string, vid: int>, vrf: record<id: int, name: string, prefix_count: int, rd: string, url: string>> {
+]: nothing -> oneof<record<created: string, custom_fields: record, description: string, family: record<label: string, value: int>, id: int, is_pool: bool, last_updated: string, prefix: string, role: record<id: int, name: string, prefix_count: int, slug: string, url: string, vlan_count: int>, site: record<id: int, name: string, slug: string, url: string>, status: record<label: string, value: string>, tags: list<string>, tenant: record<id: int, name: string, slug: string, url: string>, vlan: record<display_name: string, id: int, name: string, url: string, vid: int>, vrf: record<id: int, name: string, prefix_count: int, rd: string, url: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -13768,7 +13768,7 @@ export def "ipam-prefixes-partial-update" [
   --tenant: int # nullable
   --vlan: int # nullable
   --vrf: int # nullable
-]: any -> record<created: string, custom_fields: record, description: string, family: record<label: string, value: int>, id: int, is_pool: bool, last_updated: string, prefix: string, role: record<id: int, name: string, prefix_count: int, slug: string, url: string, vlan_count: int>, site: record<id: int, name: string, slug: string, url: string>, status: record<label: string, value: string>, tags: list<string>, tenant: record<id: int, name: string, slug: string, url: string>, vlan: record<display_name: string, id: int, name: string, url: string, vid: int>, vrf: record<id: int, name: string, prefix_count: int, rd: string, url: string>> {
+]: any -> oneof<record<created: string, custom_fields: record, description: string, family: record<label: string, value: int>, id: int, is_pool: bool, last_updated: string, prefix: string, role: record<id: int, name: string, prefix_count: int, slug: string, url: string, vlan_count: int>, site: record<id: int, name: string, slug: string, url: string>, status: record<label: string, value: string>, tags: list<string>, tenant: record<id: int, name: string, slug: string, url: string>, vlan: record<display_name: string, id: int, name: string, url: string, vid: int>, vrf: record<id: int, name: string, prefix_count: int, rd: string, url: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -13817,7 +13817,7 @@ export def "ipam-prefixes-update" [
   --tenant: int # nullable
   --vlan: int # nullable
   --vrf: int # nullable
-]: any -> record<created: string, custom_fields: record, description: string, family: record<label: string, value: int>, id: int, is_pool: bool, last_updated: string, prefix: string, role: record<id: int, name: string, prefix_count: int, slug: string, url: string, vlan_count: int>, site: record<id: int, name: string, slug: string, url: string>, status: record<label: string, value: string>, tags: list<string>, tenant: record<id: int, name: string, slug: string, url: string>, vlan: record<display_name: string, id: int, name: string, url: string, vid: int>, vrf: record<id: int, name: string, prefix_count: int, rd: string, url: string>> {
+]: any -> oneof<record<created: string, custom_fields: record, description: string, family: record<label: string, value: int>, id: int, is_pool: bool, last_updated: string, prefix: string, role: record<id: int, name: string, prefix_count: int, slug: string, url: string, vlan_count: int>, site: record<id: int, name: string, slug: string, url: string>, status: record<label: string, value: string>, tags: list<string>, tenant: record<id: int, name: string, slug: string, url: string>, vlan: record<display_name: string, id: int, name: string, url: string, vid: int>, vrf: record<id: int, name: string, prefix_count: int, rd: string, url: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -13856,7 +13856,7 @@ export def "ipam-prefixes-available-ips-read" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<address: string, family: int, vrf: record<id: int, name: string, prefix_count: int, rd: string, url: string>> {
+]: nothing -> oneof<table<address: string, family: int, vrf: record<id: int, name: string, prefix_count: int, rd: string, url: string>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -13893,7 +13893,7 @@ export def "ipam-prefixes-available-ips-create" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
-]: any -> table<address: string, family: int, vrf: record<id: int, name: string, prefix_count: int, rd: string, url: string>> {
+]: any -> oneof<table<address: string, family: int, vrf: record<id: int, name: string, prefix_count: int, rd: string, url: string>>, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -13932,7 +13932,7 @@ export def "ipam-prefixes-available-prefixes-read" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<family: int, prefix: string, vrf: record<id: int, name: string, prefix_count: int, rd: string, url: string>> {
+]: nothing -> oneof<table<family: int, prefix: string, vrf: record<id: int, name: string, prefix_count: int, rd: string, url: string>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -13979,7 +13979,7 @@ export def "ipam-prefixes-available-prefixes-create" [
   --tenant: int # nullable
   --vlan: int # nullable
   --vrf: int # nullable
-]: any -> table<family: int, prefix: string, vrf: record<id: int, name: string, prefix_count: int, rd: string, url: string>> {
+]: any -> oneof<table<family: int, prefix: string, vrf: record<id: int, name: string, prefix_count: int, rd: string, url: string>>, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -14057,7 +14057,7 @@ export def "ipam-rirs-list" [
   --description-nie: string
   --limit: int # Number of results to return per page.
   --offset: int # The initial index from which to return the results.
-]: nothing -> record<count: int, next: string, previous: string, results: table<aggregate_count: int, description: string, id: int, is_private: bool, name: string, slug: string>> {
+]: nothing -> oneof<record<count: int, next: string, previous: string, results: table<aggregate_count: int, description: string, id: int, is_private: bool, name: string, slug: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "slug" $slug "scalar") (serialize-qp "is_private" $is_private "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "id__n" $id_n "scalar") (serialize-qp "id__lte" $id_lte "scalar") (serialize-qp "id__lt" $id_lt "scalar") (serialize-qp "id__gte" $id_gte "scalar") (serialize-qp "id__gt" $id_gt "scalar") (serialize-qp "name__n" $name_n "scalar") (serialize-qp "name__ic" $name_ic "scalar") (serialize-qp "name__nic" $name_nic "scalar") (serialize-qp "name__iew" $name_iew "scalar") (serialize-qp "name__niew" $name_niew "scalar") (serialize-qp "name__isw" $name_isw "scalar") (serialize-qp "name__nisw" $name_nisw "scalar") (serialize-qp "name__ie" $name_ie "scalar") (serialize-qp "name__nie" $name_nie "scalar") (serialize-qp "slug__n" $slug_n "scalar") (serialize-qp "slug__ic" $slug_ic "scalar") (serialize-qp "slug__nic" $slug_nic "scalar") (serialize-qp "slug__iew" $slug_iew "scalar") (serialize-qp "slug__niew" $slug_niew "scalar") (serialize-qp "slug__isw" $slug_isw "scalar") (serialize-qp "slug__nisw" $slug_nisw "scalar") (serialize-qp "slug__ie" $slug_ie "scalar") (serialize-qp "slug__nie" $slug_nie "scalar") (serialize-qp "description__n" $description_n "scalar") (serialize-qp "description__ic" $description_ic "scalar") (serialize-qp "description__nic" $description_nic "scalar") (serialize-qp "description__iew" $description_iew "scalar") (serialize-qp "description__niew" $description_niew "scalar") (serialize-qp "description__isw" $description_isw "scalar") (serialize-qp "description__nisw" $description_nisw "scalar") (serialize-qp "description__ie" $description_ie "scalar") (serialize-qp "description__nie" $description_nie "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
@@ -14095,7 +14095,7 @@ export def "ipam-rirs-create" [
   --is-private: oneof<nothing, bool> # IP space managed by this RIR is considered private
   name: string
   slug: string # format: slug
-]: any -> record<aggregate_count: int, description: string, id: int, is_private: bool, name: string, slug: string> {
+]: any -> oneof<record<aggregate_count: int, description: string, id: int, is_private: bool, name: string, slug: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -14168,7 +14168,7 @@ export def "ipam-rirs-read" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<aggregate_count: int, description: string, id: int, is_private: bool, name: string, slug: string> {
+]: nothing -> oneof<record<aggregate_count: int, description: string, id: int, is_private: bool, name: string, slug: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -14207,7 +14207,7 @@ export def "ipam-rirs-partial-update" [
   --is-private: oneof<nothing, bool> # IP space managed by this RIR is considered private
   name: string
   slug: string # format: slug
-]: any -> record<aggregate_count: int, description: string, id: int, is_private: bool, name: string, slug: string> {
+]: any -> oneof<record<aggregate_count: int, description: string, id: int, is_private: bool, name: string, slug: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -14249,7 +14249,7 @@ export def "ipam-rirs-update" [
   --is-private: oneof<nothing, bool> # IP space managed by this RIR is considered private
   name: string
   slug: string # format: slug
-]: any -> record<aggregate_count: int, description: string, id: int, is_private: bool, name: string, slug: string> {
+]: any -> oneof<record<aggregate_count: int, description: string, id: int, is_private: bool, name: string, slug: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -14316,7 +14316,7 @@ export def "ipam-roles-list" [
   --slug-nie: string
   --limit: int # Number of results to return per page.
   --offset: int # The initial index from which to return the results.
-]: nothing -> record<count: int, next: string, previous: string, results: table<description: string, id: int, name: string, prefix_count: int, slug: string, vlan_count: int, weight: int>> {
+]: nothing -> oneof<record<count: int, next: string, previous: string, results: table<description: string, id: int, name: string, prefix_count: int, slug: string, vlan_count: int, weight: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "slug" $slug "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "id__n" $id_n "scalar") (serialize-qp "id__lte" $id_lte "scalar") (serialize-qp "id__lt" $id_lt "scalar") (serialize-qp "id__gte" $id_gte "scalar") (serialize-qp "id__gt" $id_gt "scalar") (serialize-qp "name__n" $name_n "scalar") (serialize-qp "name__ic" $name_ic "scalar") (serialize-qp "name__nic" $name_nic "scalar") (serialize-qp "name__iew" $name_iew "scalar") (serialize-qp "name__niew" $name_niew "scalar") (serialize-qp "name__isw" $name_isw "scalar") (serialize-qp "name__nisw" $name_nisw "scalar") (serialize-qp "name__ie" $name_ie "scalar") (serialize-qp "name__nie" $name_nie "scalar") (serialize-qp "slug__n" $slug_n "scalar") (serialize-qp "slug__ic" $slug_ic "scalar") (serialize-qp "slug__nic" $slug_nic "scalar") (serialize-qp "slug__iew" $slug_iew "scalar") (serialize-qp "slug__niew" $slug_niew "scalar") (serialize-qp "slug__isw" $slug_isw "scalar") (serialize-qp "slug__nisw" $slug_nisw "scalar") (serialize-qp "slug__ie" $slug_ie "scalar") (serialize-qp "slug__nie" $slug_nie "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
@@ -14354,7 +14354,7 @@ export def "ipam-roles-create" [
   name: string
   slug: string # format: slug
   --weight: int
-]: any -> record<description: string, id: int, name: string, prefix_count: int, slug: string, vlan_count: int, weight: int> {
+]: any -> oneof<record<description: string, id: int, name: string, prefix_count: int, slug: string, vlan_count: int, weight: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -14427,7 +14427,7 @@ export def "ipam-roles-read" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<description: string, id: int, name: string, prefix_count: int, slug: string, vlan_count: int, weight: int> {
+]: nothing -> oneof<record<description: string, id: int, name: string, prefix_count: int, slug: string, vlan_count: int, weight: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -14466,7 +14466,7 @@ export def "ipam-roles-partial-update" [
   name: string
   slug: string # format: slug
   --weight: int
-]: any -> record<description: string, id: int, name: string, prefix_count: int, slug: string, vlan_count: int, weight: int> {
+]: any -> oneof<record<description: string, id: int, name: string, prefix_count: int, slug: string, vlan_count: int, weight: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -14508,7 +14508,7 @@ export def "ipam-roles-update" [
   name: string
   slug: string # format: slug
   --weight: int
-]: any -> record<description: string, id: int, name: string, prefix_count: int, slug: string, vlan_count: int, weight: int> {
+]: any -> oneof<record<description: string, id: int, name: string, prefix_count: int, slug: string, vlan_count: int, weight: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -14589,7 +14589,7 @@ export def "ipam-services-list" [
   --tag-n: string
   --limit: int # Number of results to return per page.
   --offset: int # The initial index from which to return the results.
-]: nothing -> record<count: int, next: string, previous: string, results: table<created: string, custom_fields: record, description: string, device: record, id: int, ipaddresses: list, last_updated: string, name: string, port: int, protocol: record, tags: list, virtual_machine: record>> {
+]: nothing -> oneof<record<count: int, next: string, previous: string, results: table<created: string, custom_fields: record, description: string, device: record, id: int, ipaddresses: list, last_updated: string, name: string, port: int, protocol: record, tags: list, virtual_machine: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "protocol" $protocol "scalar") (serialize-qp "port" $port "scalar") (serialize-qp "created" $created "scalar") (serialize-qp "created__gte" $created_gte "scalar") (serialize-qp "created__lte" $created_lte "scalar") (serialize-qp "last_updated" $last_updated "scalar") (serialize-qp "last_updated__gte" $last_updated_gte "scalar") (serialize-qp "last_updated__lte" $last_updated_lte "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "device_id" $device_id "scalar") (serialize-qp "device" $device "scalar") (serialize-qp "virtual_machine_id" $virtual_machine_id "scalar") (serialize-qp "virtual_machine" $virtual_machine "scalar") (serialize-qp "tag" $tag "scalar") (serialize-qp "id__n" $id_n "scalar") (serialize-qp "id__lte" $id_lte "scalar") (serialize-qp "id__lt" $id_lt "scalar") (serialize-qp "id__gte" $id_gte "scalar") (serialize-qp "id__gt" $id_gt "scalar") (serialize-qp "name__n" $name_n "scalar") (serialize-qp "name__ic" $name_ic "scalar") (serialize-qp "name__nic" $name_nic "scalar") (serialize-qp "name__iew" $name_iew "scalar") (serialize-qp "name__niew" $name_niew "scalar") (serialize-qp "name__isw" $name_isw "scalar") (serialize-qp "name__nisw" $name_nisw "scalar") (serialize-qp "name__ie" $name_ie "scalar") (serialize-qp "name__nie" $name_nie "scalar") (serialize-qp "protocol__n" $protocol_n "scalar") (serialize-qp "port__n" $port_n "scalar") (serialize-qp "port__lte" $port_lte "scalar") (serialize-qp "port__lt" $port_lt "scalar") (serialize-qp "port__gte" $port_gte "scalar") (serialize-qp "port__gt" $port_gt "scalar") (serialize-qp "device_id__n" $device_id_n "scalar") (serialize-qp "device__n" $device_n "scalar") (serialize-qp "virtual_machine_id__n" $virtual_machine_id_n "scalar") (serialize-qp "virtual_machine__n" $virtual_machine_n "scalar") (serialize-qp "tag__n" $tag_n "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
@@ -14632,7 +14632,7 @@ export def "ipam-services-create" [
   protocol: string@protocol-completer
   --tags: list<string>
   --virtual-machine: int # nullable
-]: any -> record<created: string, custom_fields: record, description: string, device: record<display_name: string, id: int, name: string, url: string>, id: int, ipaddresses: table<address: string, family: string, id: int, url: string>, last_updated: string, name: string, port: int, protocol: record<label: string, value: string>, tags: list<string>, virtual_machine: record<id: int, name: string, url: string>> {
+]: any -> oneof<record<created: string, custom_fields: record, description: string, device: record<display_name: string, id: int, name: string, url: string>, id: int, ipaddresses: table<address: string, family: string, id: int, url: string>, last_updated: string, name: string, port: int, protocol: record<label: string, value: string>, tags: list<string>, virtual_machine: record<id: int, name: string, url: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -14705,7 +14705,7 @@ export def "ipam-services-read" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<created: string, custom_fields: record, description: string, device: record<display_name: string, id: int, name: string, url: string>, id: int, ipaddresses: table<address: string, family: string, id: int, url: string>, last_updated: string, name: string, port: int, protocol: record<label: string, value: string>, tags: list<string>, virtual_machine: record<id: int, name: string, url: string>> {
+]: nothing -> oneof<record<created: string, custom_fields: record, description: string, device: record<display_name: string, id: int, name: string, url: string>, id: int, ipaddresses: table<address: string, family: string, id: int, url: string>, last_updated: string, name: string, port: int, protocol: record<label: string, value: string>, tags: list<string>, virtual_machine: record<id: int, name: string, url: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -14749,7 +14749,7 @@ export def "ipam-services-partial-update" [
   protocol: string@protocol-completer
   --tags: list<string>
   --virtual-machine: int # nullable
-]: any -> record<created: string, custom_fields: record, description: string, device: record<display_name: string, id: int, name: string, url: string>, id: int, ipaddresses: table<address: string, family: string, id: int, url: string>, last_updated: string, name: string, port: int, protocol: record<label: string, value: string>, tags: list<string>, virtual_machine: record<id: int, name: string, url: string>> {
+]: any -> oneof<record<created: string, custom_fields: record, description: string, device: record<display_name: string, id: int, name: string, url: string>, id: int, ipaddresses: table<address: string, family: string, id: int, url: string>, last_updated: string, name: string, port: int, protocol: record<label: string, value: string>, tags: list<string>, virtual_machine: record<id: int, name: string, url: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -14796,7 +14796,7 @@ export def "ipam-services-update" [
   protocol: string@protocol-completer
   --tags: list<string>
   --virtual-machine: int # nullable
-]: any -> record<created: string, custom_fields: record, description: string, device: record<display_name: string, id: int, name: string, url: string>, id: int, ipaddresses: table<address: string, family: string, id: int, url: string>, last_updated: string, name: string, port: int, protocol: record<label: string, value: string>, tags: list<string>, virtual_machine: record<id: int, name: string, url: string>> {
+]: any -> oneof<record<created: string, custom_fields: record, description: string, device: record<display_name: string, id: int, name: string, url: string>, id: int, ipaddresses: table<address: string, family: string, id: int, url: string>, last_updated: string, name: string, port: int, protocol: record<label: string, value: string>, tags: list<string>, virtual_machine: record<id: int, name: string, url: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -14881,7 +14881,7 @@ export def "ipam-vlan-groups-list" [
   --site-n: string
   --limit: int # Number of results to return per page.
   --offset: int # The initial index from which to return the results.
-]: nothing -> record<count: int, next: string, previous: string, results: table<description: string, id: int, name: string, site: record, slug: string, vlan_count: int>> {
+]: nothing -> oneof<record<count: int, next: string, previous: string, results: table<description: string, id: int, name: string, site: record, slug: string, vlan_count: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "slug" $slug "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "region_id" $region_id "scalar") (serialize-qp "region" $region "scalar") (serialize-qp "site_id" $site_id "scalar") (serialize-qp "site" $site "scalar") (serialize-qp "id__n" $id_n "scalar") (serialize-qp "id__lte" $id_lte "scalar") (serialize-qp "id__lt" $id_lt "scalar") (serialize-qp "id__gte" $id_gte "scalar") (serialize-qp "id__gt" $id_gt "scalar") (serialize-qp "name__n" $name_n "scalar") (serialize-qp "name__ic" $name_ic "scalar") (serialize-qp "name__nic" $name_nic "scalar") (serialize-qp "name__iew" $name_iew "scalar") (serialize-qp "name__niew" $name_niew "scalar") (serialize-qp "name__isw" $name_isw "scalar") (serialize-qp "name__nisw" $name_nisw "scalar") (serialize-qp "name__ie" $name_ie "scalar") (serialize-qp "name__nie" $name_nie "scalar") (serialize-qp "slug__n" $slug_n "scalar") (serialize-qp "slug__ic" $slug_ic "scalar") (serialize-qp "slug__nic" $slug_nic "scalar") (serialize-qp "slug__iew" $slug_iew "scalar") (serialize-qp "slug__niew" $slug_niew "scalar") (serialize-qp "slug__isw" $slug_isw "scalar") (serialize-qp "slug__nisw" $slug_nisw "scalar") (serialize-qp "slug__ie" $slug_ie "scalar") (serialize-qp "slug__nie" $slug_nie "scalar") (serialize-qp "description__n" $description_n "scalar") (serialize-qp "description__ic" $description_ic "scalar") (serialize-qp "description__nic" $description_nic "scalar") (serialize-qp "description__iew" $description_iew "scalar") (serialize-qp "description__niew" $description_niew "scalar") (serialize-qp "description__isw" $description_isw "scalar") (serialize-qp "description__nisw" $description_nisw "scalar") (serialize-qp "description__ie" $description_ie "scalar") (serialize-qp "description__nie" $description_nie "scalar") (serialize-qp "region_id__n" $region_id_n "scalar") (serialize-qp "region__n" $region_n "scalar") (serialize-qp "site_id__n" $site_id_n "scalar") (serialize-qp "site__n" $site_n "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
@@ -14919,7 +14919,7 @@ export def "ipam-vlan-groups-create" [
   name: string
   --site: int # nullable
   slug: string # format: slug
-]: any -> record<description: string, id: int, name: string, site: record<id: int, name: string, slug: string, url: string>, slug: string, vlan_count: int> {
+]: any -> oneof<record<description: string, id: int, name: string, site: record<id: int, name: string, slug: string, url: string>, slug: string, vlan_count: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -14992,7 +14992,7 @@ export def "ipam-vlan-groups-read" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<description: string, id: int, name: string, site: record<id: int, name: string, slug: string, url: string>, slug: string, vlan_count: int> {
+]: nothing -> oneof<record<description: string, id: int, name: string, site: record<id: int, name: string, slug: string, url: string>, slug: string, vlan_count: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -15031,7 +15031,7 @@ export def "ipam-vlan-groups-partial-update" [
   name: string
   --site: int # nullable
   slug: string # format: slug
-]: any -> record<description: string, id: int, name: string, site: record<id: int, name: string, slug: string, url: string>, slug: string, vlan_count: int> {
+]: any -> oneof<record<description: string, id: int, name: string, site: record<id: int, name: string, slug: string, url: string>, slug: string, vlan_count: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -15073,7 +15073,7 @@ export def "ipam-vlan-groups-update" [
   name: string
   --site: int # nullable
   slug: string # format: slug
-]: any -> record<description: string, id: int, name: string, site: record<id: int, name: string, slug: string, url: string>, slug: string, vlan_count: int> {
+]: any -> oneof<record<description: string, id: int, name: string, site: record<id: int, name: string, slug: string, url: string>, slug: string, vlan_count: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -15170,7 +15170,7 @@ export def "ipam-vlans-list" [
   --tag-n: string
   --limit: int # Number of results to return per page.
   --offset: int # The initial index from which to return the results.
-]: nothing -> record<count: int, next: string, previous: string, results: table<created: string, custom_fields: record, description: string, display_name: string, group: record, id: int, last_updated: string, name: string, prefix_count: int, role: record, site: record, status: record, tags: list, tenant: record, vid: int>> {
+]: nothing -> oneof<record<count: int, next: string, previous: string, results: table<created: string, custom_fields: record, description: string, display_name: string, group: record, id: int, last_updated: string, name: string, prefix_count: int, role: record, site: record, status: record, tags: list, tenant: record, vid: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "vid" $vid "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "tenant_group_id" $tenant_group_id "scalar") (serialize-qp "tenant_group" $tenant_group "scalar") (serialize-qp "tenant_id" $tenant_id "scalar") (serialize-qp "tenant" $tenant "scalar") (serialize-qp "created" $created "scalar") (serialize-qp "created__gte" $created_gte "scalar") (serialize-qp "created__lte" $created_lte "scalar") (serialize-qp "last_updated" $last_updated "scalar") (serialize-qp "last_updated__gte" $last_updated_gte "scalar") (serialize-qp "last_updated__lte" $last_updated_lte "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "region_id" $region_id "scalar") (serialize-qp "region" $region "scalar") (serialize-qp "site_id" $site_id "scalar") (serialize-qp "site" $site "scalar") (serialize-qp "group_id" $group_id "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "role_id" $role_id "scalar") (serialize-qp "role" $role "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "tag" $tag "scalar") (serialize-qp "id__n" $id_n "scalar") (serialize-qp "id__lte" $id_lte "scalar") (serialize-qp "id__lt" $id_lt "scalar") (serialize-qp "id__gte" $id_gte "scalar") (serialize-qp "id__gt" $id_gt "scalar") (serialize-qp "vid__n" $vid_n "scalar") (serialize-qp "vid__lte" $vid_lte "scalar") (serialize-qp "vid__lt" $vid_lt "scalar") (serialize-qp "vid__gte" $vid_gte "scalar") (serialize-qp "vid__gt" $vid_gt "scalar") (serialize-qp "name__n" $name_n "scalar") (serialize-qp "name__ic" $name_ic "scalar") (serialize-qp "name__nic" $name_nic "scalar") (serialize-qp "name__iew" $name_iew "scalar") (serialize-qp "name__niew" $name_niew "scalar") (serialize-qp "name__isw" $name_isw "scalar") (serialize-qp "name__nisw" $name_nisw "scalar") (serialize-qp "name__ie" $name_ie "scalar") (serialize-qp "name__nie" $name_nie "scalar") (serialize-qp "tenant_group_id__n" $tenant_group_id_n "scalar") (serialize-qp "tenant_group__n" $tenant_group_n "scalar") (serialize-qp "tenant_id__n" $tenant_id_n "scalar") (serialize-qp "tenant__n" $tenant_n "scalar") (serialize-qp "region_id__n" $region_id_n "scalar") (serialize-qp "region__n" $region_n "scalar") (serialize-qp "site_id__n" $site_id_n "scalar") (serialize-qp "site__n" $site_n "scalar") (serialize-qp "group_id__n" $group_id_n "scalar") (serialize-qp "group__n" $group_n "scalar") (serialize-qp "role_id__n" $role_id_n "scalar") (serialize-qp "role__n" $role_n "scalar") (serialize-qp "status__n" $status_n "scalar") (serialize-qp "tag__n" $tag_n "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
@@ -15214,7 +15214,7 @@ export def "ipam-vlans-create" [
   --tags: list<string>
   --tenant: int # nullable
   vid: int
-]: any -> record<created: string, custom_fields: record, description: string, display_name: string, group: record<id: int, name: string, slug: string, url: string, vlan_count: int>, id: int, last_updated: string, name: string, prefix_count: int, role: record<id: int, name: string, prefix_count: int, slug: string, url: string, vlan_count: int>, site: record<id: int, name: string, slug: string, url: string>, status: record<label: string, value: string>, tags: list<string>, tenant: record<id: int, name: string, slug: string, url: string>, vid: int> {
+]: any -> oneof<record<created: string, custom_fields: record, description: string, display_name: string, group: record<id: int, name: string, slug: string, url: string, vlan_count: int>, id: int, last_updated: string, name: string, prefix_count: int, role: record<id: int, name: string, prefix_count: int, slug: string, url: string, vlan_count: int>, site: record<id: int, name: string, slug: string, url: string>, status: record<label: string, value: string>, tags: list<string>, tenant: record<id: int, name: string, slug: string, url: string>, vid: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -15287,7 +15287,7 @@ export def "ipam-vlans-read" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<created: string, custom_fields: record, description: string, display_name: string, group: record<id: int, name: string, slug: string, url: string, vlan_count: int>, id: int, last_updated: string, name: string, prefix_count: int, role: record<id: int, name: string, prefix_count: int, slug: string, url: string, vlan_count: int>, site: record<id: int, name: string, slug: string, url: string>, status: record<label: string, value: string>, tags: list<string>, tenant: record<id: int, name: string, slug: string, url: string>, vid: int> {
+]: nothing -> oneof<record<created: string, custom_fields: record, description: string, display_name: string, group: record<id: int, name: string, slug: string, url: string, vlan_count: int>, id: int, last_updated: string, name: string, prefix_count: int, role: record<id: int, name: string, prefix_count: int, slug: string, url: string, vlan_count: int>, site: record<id: int, name: string, slug: string, url: string>, status: record<label: string, value: string>, tags: list<string>, tenant: record<id: int, name: string, slug: string, url: string>, vid: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -15332,7 +15332,7 @@ export def "ipam-vlans-partial-update" [
   --tags: list<string>
   --tenant: int # nullable
   vid: int
-]: any -> record<created: string, custom_fields: record, description: string, display_name: string, group: record<id: int, name: string, slug: string, url: string, vlan_count: int>, id: int, last_updated: string, name: string, prefix_count: int, role: record<id: int, name: string, prefix_count: int, slug: string, url: string, vlan_count: int>, site: record<id: int, name: string, slug: string, url: string>, status: record<label: string, value: string>, tags: list<string>, tenant: record<id: int, name: string, slug: string, url: string>, vid: int> {
+]: any -> oneof<record<created: string, custom_fields: record, description: string, display_name: string, group: record<id: int, name: string, slug: string, url: string, vlan_count: int>, id: int, last_updated: string, name: string, prefix_count: int, role: record<id: int, name: string, prefix_count: int, slug: string, url: string, vlan_count: int>, site: record<id: int, name: string, slug: string, url: string>, status: record<label: string, value: string>, tags: list<string>, tenant: record<id: int, name: string, slug: string, url: string>, vid: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -15380,7 +15380,7 @@ export def "ipam-vlans-update" [
   --tags: list<string>
   --tenant: int # nullable
   vid: int
-]: any -> record<created: string, custom_fields: record, description: string, display_name: string, group: record<id: int, name: string, slug: string, url: string, vlan_count: int>, id: int, last_updated: string, name: string, prefix_count: int, role: record<id: int, name: string, prefix_count: int, slug: string, url: string, vlan_count: int>, site: record<id: int, name: string, slug: string, url: string>, status: record<label: string, value: string>, tags: list<string>, tenant: record<id: int, name: string, slug: string, url: string>, vid: int> {
+]: any -> oneof<record<created: string, custom_fields: record, description: string, display_name: string, group: record<id: int, name: string, slug: string, url: string, vlan_count: int>, id: int, last_updated: string, name: string, prefix_count: int, role: record<id: int, name: string, prefix_count: int, slug: string, url: string, vlan_count: int>, site: record<id: int, name: string, slug: string, url: string>, status: record<label: string, value: string>, tags: list<string>, tenant: record<id: int, name: string, slug: string, url: string>, vid: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -15464,7 +15464,7 @@ export def "ipam-vrfs-list" [
   --tag-n: string
   --limit: int # Number of results to return per page.
   --offset: int # The initial index from which to return the results.
-]: nothing -> record<count: int, next: string, previous: string, results: table<created: string, custom_fields: record, description: string, display_name: string, enforce_unique: bool, id: int, ipaddress_count: int, last_updated: string, name: string, prefix_count: int, rd: string, tags: list, tenant: record>> {
+]: nothing -> oneof<record<count: int, next: string, previous: string, results: table<created: string, custom_fields: record, description: string, display_name: string, enforce_unique: bool, id: int, ipaddress_count: int, last_updated: string, name: string, prefix_count: int, rd: string, tags: list, tenant: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "rd" $rd "scalar") (serialize-qp "enforce_unique" $enforce_unique "scalar") (serialize-qp "tenant_group_id" $tenant_group_id "scalar") (serialize-qp "tenant_group" $tenant_group "scalar") (serialize-qp "tenant_id" $tenant_id "scalar") (serialize-qp "tenant" $tenant "scalar") (serialize-qp "created" $created "scalar") (serialize-qp "created__gte" $created_gte "scalar") (serialize-qp "created__lte" $created_lte "scalar") (serialize-qp "last_updated" $last_updated "scalar") (serialize-qp "last_updated__gte" $last_updated_gte "scalar") (serialize-qp "last_updated__lte" $last_updated_lte "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "tag" $tag "scalar") (serialize-qp "id__n" $id_n "scalar") (serialize-qp "id__lte" $id_lte "scalar") (serialize-qp "id__lt" $id_lt "scalar") (serialize-qp "id__gte" $id_gte "scalar") (serialize-qp "id__gt" $id_gt "scalar") (serialize-qp "name__n" $name_n "scalar") (serialize-qp "name__ic" $name_ic "scalar") (serialize-qp "name__nic" $name_nic "scalar") (serialize-qp "name__iew" $name_iew "scalar") (serialize-qp "name__niew" $name_niew "scalar") (serialize-qp "name__isw" $name_isw "scalar") (serialize-qp "name__nisw" $name_nisw "scalar") (serialize-qp "name__ie" $name_ie "scalar") (serialize-qp "name__nie" $name_nie "scalar") (serialize-qp "rd__n" $rd_n "scalar") (serialize-qp "rd__ic" $rd_ic "scalar") (serialize-qp "rd__nic" $rd_nic "scalar") (serialize-qp "rd__iew" $rd_iew "scalar") (serialize-qp "rd__niew" $rd_niew "scalar") (serialize-qp "rd__isw" $rd_isw "scalar") (serialize-qp "rd__nisw" $rd_nisw "scalar") (serialize-qp "rd__ie" $rd_ie "scalar") (serialize-qp "rd__nie" $rd_nie "scalar") (serialize-qp "tenant_group_id__n" $tenant_group_id_n "scalar") (serialize-qp "tenant_group__n" $tenant_group_n "scalar") (serialize-qp "tenant_id__n" $tenant_id_n "scalar") (serialize-qp "tenant__n" $tenant_n "scalar") (serialize-qp "tag__n" $tag_n "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
@@ -15505,7 +15505,7 @@ export def "ipam-vrfs-create" [
   --rd: string # Unique route distinguisher (as defined in RFC 4364) (nullable)
   --tags: list<string>
   --tenant: int # nullable
-]: any -> record<created: string, custom_fields: record, description: string, display_name: string, enforce_unique: bool, id: int, ipaddress_count: int, last_updated: string, name: string, prefix_count: int, rd: string, tags: list<string>, tenant: record<id: int, name: string, slug: string, url: string>> {
+]: any -> oneof<record<created: string, custom_fields: record, description: string, display_name: string, enforce_unique: bool, id: int, ipaddress_count: int, last_updated: string, name: string, prefix_count: int, rd: string, tags: list<string>, tenant: record<id: int, name: string, slug: string, url: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -15578,7 +15578,7 @@ export def "ipam-vrfs-read" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<created: string, custom_fields: record, description: string, display_name: string, enforce_unique: bool, id: int, ipaddress_count: int, last_updated: string, name: string, prefix_count: int, rd: string, tags: list<string>, tenant: record<id: int, name: string, slug: string, url: string>> {
+]: nothing -> oneof<record<created: string, custom_fields: record, description: string, display_name: string, enforce_unique: bool, id: int, ipaddress_count: int, last_updated: string, name: string, prefix_count: int, rd: string, tags: list<string>, tenant: record<id: int, name: string, slug: string, url: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -15620,7 +15620,7 @@ export def "ipam-vrfs-partial-update" [
   --rd: string # Unique route distinguisher (as defined in RFC 4364) (nullable)
   --tags: list<string>
   --tenant: int # nullable
-]: any -> record<created: string, custom_fields: record, description: string, display_name: string, enforce_unique: bool, id: int, ipaddress_count: int, last_updated: string, name: string, prefix_count: int, rd: string, tags: list<string>, tenant: record<id: int, name: string, slug: string, url: string>> {
+]: any -> oneof<record<created: string, custom_fields: record, description: string, display_name: string, enforce_unique: bool, id: int, ipaddress_count: int, last_updated: string, name: string, prefix_count: int, rd: string, tags: list<string>, tenant: record<id: int, name: string, slug: string, url: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -15665,7 +15665,7 @@ export def "ipam-vrfs-update" [
   --rd: string # Unique route distinguisher (as defined in RFC 4364) (nullable)
   --tags: list<string>
   --tenant: int # nullable
-]: any -> record<created: string, custom_fields: record, description: string, display_name: string, enforce_unique: bool, id: int, ipaddress_count: int, last_updated: string, name: string, prefix_count: int, rd: string, tags: list<string>, tenant: record<id: int, name: string, slug: string, url: string>> {
+]: any -> oneof<record<created: string, custom_fields: record, description: string, display_name: string, enforce_unique: bool, id: int, ipaddress_count: int, last_updated: string, name: string, prefix_count: int, rd: string, tags: list<string>, tenant: record<id: int, name: string, slug: string, url: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -15800,7 +15800,7 @@ export def "secrets-secret-roles-list" [
   --slug-nie: string
   --limit: int # Number of results to return per page.
   --offset: int # The initial index from which to return the results.
-]: nothing -> record<count: int, next: string, previous: string, results: table<description: string, id: int, name: string, secret_count: int, slug: string>> {
+]: nothing -> oneof<record<count: int, next: string, previous: string, results: table<description: string, id: int, name: string, secret_count: int, slug: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "slug" $slug "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "id__n" $id_n "scalar") (serialize-qp "id__lte" $id_lte "scalar") (serialize-qp "id__lt" $id_lt "scalar") (serialize-qp "id__gte" $id_gte "scalar") (serialize-qp "id__gt" $id_gt "scalar") (serialize-qp "name__n" $name_n "scalar") (serialize-qp "name__ic" $name_ic "scalar") (serialize-qp "name__nic" $name_nic "scalar") (serialize-qp "name__iew" $name_iew "scalar") (serialize-qp "name__niew" $name_niew "scalar") (serialize-qp "name__isw" $name_isw "scalar") (serialize-qp "name__nisw" $name_nisw "scalar") (serialize-qp "name__ie" $name_ie "scalar") (serialize-qp "name__nie" $name_nie "scalar") (serialize-qp "slug__n" $slug_n "scalar") (serialize-qp "slug__ic" $slug_ic "scalar") (serialize-qp "slug__nic" $slug_nic "scalar") (serialize-qp "slug__iew" $slug_iew "scalar") (serialize-qp "slug__niew" $slug_niew "scalar") (serialize-qp "slug__isw" $slug_isw "scalar") (serialize-qp "slug__nisw" $slug_nisw "scalar") (serialize-qp "slug__ie" $slug_ie "scalar") (serialize-qp "slug__nie" $slug_nie "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
@@ -15837,7 +15837,7 @@ export def "secrets-secret-roles-create" [
   --description: string
   name: string
   slug: string # format: slug
-]: any -> record<description: string, id: int, name: string, secret_count: int, slug: string> {
+]: any -> oneof<record<description: string, id: int, name: string, secret_count: int, slug: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -15910,7 +15910,7 @@ export def "secrets-secret-roles-read" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<description: string, id: int, name: string, secret_count: int, slug: string> {
+]: nothing -> oneof<record<description: string, id: int, name: string, secret_count: int, slug: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -15948,7 +15948,7 @@ export def "secrets-secret-roles-partial-update" [
   --description: string
   name: string
   slug: string # format: slug
-]: any -> record<description: string, id: int, name: string, secret_count: int, slug: string> {
+]: any -> oneof<record<description: string, id: int, name: string, secret_count: int, slug: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -15989,7 +15989,7 @@ export def "secrets-secret-roles-update" [
   --description: string
   name: string
   slug: string # format: slug
-]: any -> record<description: string, id: int, name: string, secret_count: int, slug: string> {
+]: any -> oneof<record<description: string, id: int, name: string, secret_count: int, slug: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -16061,7 +16061,7 @@ export def "secrets-secrets-list" [
   --tag-n: string
   --limit: int # Number of results to return per page.
   --offset: int # The initial index from which to return the results.
-]: nothing -> record<count: int, next: string, previous: string, results: table<created: string, custom_fields: record, device: record, hash: string, id: int, last_updated: string, name: string, plaintext: string, role: record, tags: list>> {
+]: nothing -> oneof<record<count: int, next: string, previous: string, results: table<created: string, custom_fields: record, device: record, hash: string, id: int, last_updated: string, name: string, plaintext: string, role: record, tags: list>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "created" $created "scalar") (serialize-qp "created__gte" $created_gte "scalar") (serialize-qp "created__lte" $created_lte "scalar") (serialize-qp "last_updated" $last_updated "scalar") (serialize-qp "last_updated__gte" $last_updated_gte "scalar") (serialize-qp "last_updated__lte" $last_updated_lte "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "role_id" $role_id "scalar") (serialize-qp "role" $role "scalar") (serialize-qp "device_id" $device_id "scalar") (serialize-qp "device" $device "scalar") (serialize-qp "tag" $tag "scalar") (serialize-qp "id__n" $id_n "scalar") (serialize-qp "id__lte" $id_lte "scalar") (serialize-qp "id__lt" $id_lt "scalar") (serialize-qp "id__gte" $id_gte "scalar") (serialize-qp "id__gt" $id_gt "scalar") (serialize-qp "name__n" $name_n "scalar") (serialize-qp "name__ic" $name_ic "scalar") (serialize-qp "name__nic" $name_nic "scalar") (serialize-qp "name__iew" $name_iew "scalar") (serialize-qp "name__niew" $name_niew "scalar") (serialize-qp "name__isw" $name_isw "scalar") (serialize-qp "name__nisw" $name_nisw "scalar") (serialize-qp "name__ie" $name_ie "scalar") (serialize-qp "name__nie" $name_nie "scalar") (serialize-qp "role_id__n" $role_id_n "scalar") (serialize-qp "role__n" $role_n "scalar") (serialize-qp "device_id__n" $device_id_n "scalar") (serialize-qp "device__n" $device_n "scalar") (serialize-qp "tag__n" $tag_n "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
@@ -16101,7 +16101,7 @@ export def "secrets-secrets-create" [
   plaintext: string
   role: int
   --tags: list<string>
-]: any -> record<created: string, custom_fields: record, device: record<display_name: string, id: int, name: string, url: string>, hash: string, id: int, last_updated: string, name: string, plaintext: string, role: record<id: int, name: string, secret_count: int, slug: string, url: string>, tags: list<string>> {
+]: any -> oneof<record<created: string, custom_fields: record, device: record<display_name: string, id: int, name: string, url: string>, hash: string, id: int, last_updated: string, name: string, plaintext: string, role: record<id: int, name: string, secret_count: int, slug: string, url: string>, tags: list<string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -16173,7 +16173,7 @@ export def "secrets-secrets-read" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<created: string, custom_fields: record, device: record<display_name: string, id: int, name: string, url: string>, hash: string, id: int, last_updated: string, name: string, plaintext: string, role: record<id: int, name: string, secret_count: int, slug: string, url: string>, tags: list<string>> {
+]: nothing -> oneof<record<created: string, custom_fields: record, device: record<display_name: string, id: int, name: string, url: string>, hash: string, id: int, last_updated: string, name: string, plaintext: string, role: record<id: int, name: string, secret_count: int, slug: string, url: string>, tags: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -16214,7 +16214,7 @@ export def "secrets-secrets-partial-update" [
   plaintext: string
   role: int
   --tags: list<string>
-]: any -> record<created: string, custom_fields: record, device: record<display_name: string, id: int, name: string, url: string>, hash: string, id: int, last_updated: string, name: string, plaintext: string, role: record<id: int, name: string, secret_count: int, slug: string, url: string>, tags: list<string>> {
+]: any -> oneof<record<created: string, custom_fields: record, device: record<display_name: string, id: int, name: string, url: string>, hash: string, id: int, last_updated: string, name: string, plaintext: string, role: record<id: int, name: string, secret_count: int, slug: string, url: string>, tags: list<string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -16258,7 +16258,7 @@ export def "secrets-secrets-update" [
   plaintext: string
   role: int
   --tags: list<string>
-]: any -> record<created: string, custom_fields: record, device: record<display_name: string, id: int, name: string, url: string>, hash: string, id: int, last_updated: string, name: string, plaintext: string, role: record<id: int, name: string, secret_count: int, slug: string, url: string>, tags: list<string>> {
+]: any -> oneof<record<created: string, custom_fields: record, device: record<display_name: string, id: int, name: string, url: string>, hash: string, id: int, last_updated: string, name: string, plaintext: string, role: record<id: int, name: string, secret_count: int, slug: string, url: string>, tags: list<string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -16339,7 +16339,7 @@ export def "tenancy-tenant-groups-list" [
   --parent-n: string
   --limit: int # Number of results to return per page.
   --offset: int # The initial index from which to return the results.
-]: nothing -> record<count: int, next: string, previous: string, results: table<description: string, id: int, name: string, parent: record, slug: string, tenant_count: int>> {
+]: nothing -> oneof<record<count: int, next: string, previous: string, results: table<description: string, id: int, name: string, parent: record, slug: string, tenant_count: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "slug" $slug "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "parent_id" $parent_id "scalar") (serialize-qp "parent" $parent "scalar") (serialize-qp "id__n" $id_n "scalar") (serialize-qp "id__lte" $id_lte "scalar") (serialize-qp "id__lt" $id_lt "scalar") (serialize-qp "id__gte" $id_gte "scalar") (serialize-qp "id__gt" $id_gt "scalar") (serialize-qp "name__n" $name_n "scalar") (serialize-qp "name__ic" $name_ic "scalar") (serialize-qp "name__nic" $name_nic "scalar") (serialize-qp "name__iew" $name_iew "scalar") (serialize-qp "name__niew" $name_niew "scalar") (serialize-qp "name__isw" $name_isw "scalar") (serialize-qp "name__nisw" $name_nisw "scalar") (serialize-qp "name__ie" $name_ie "scalar") (serialize-qp "name__nie" $name_nie "scalar") (serialize-qp "slug__n" $slug_n "scalar") (serialize-qp "slug__ic" $slug_ic "scalar") (serialize-qp "slug__nic" $slug_nic "scalar") (serialize-qp "slug__iew" $slug_iew "scalar") (serialize-qp "slug__niew" $slug_niew "scalar") (serialize-qp "slug__isw" $slug_isw "scalar") (serialize-qp "slug__nisw" $slug_nisw "scalar") (serialize-qp "slug__ie" $slug_ie "scalar") (serialize-qp "slug__nie" $slug_nie "scalar") (serialize-qp "description__n" $description_n "scalar") (serialize-qp "description__ic" $description_ic "scalar") (serialize-qp "description__nic" $description_nic "scalar") (serialize-qp "description__iew" $description_iew "scalar") (serialize-qp "description__niew" $description_niew "scalar") (serialize-qp "description__isw" $description_isw "scalar") (serialize-qp "description__nisw" $description_nisw "scalar") (serialize-qp "description__ie" $description_ie "scalar") (serialize-qp "description__nie" $description_nie "scalar") (serialize-qp "parent_id__n" $parent_id_n "scalar") (serialize-qp "parent__n" $parent_n "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
@@ -16377,7 +16377,7 @@ export def "tenancy-tenant-groups-create" [
   name: string
   --parent: int # nullable
   slug: string # format: slug
-]: any -> record<description: string, id: int, name: string, parent: record<id: int, name: string, slug: string, tenant_count: int, url: string>, slug: string, tenant_count: int> {
+]: any -> oneof<record<description: string, id: int, name: string, parent: record<id: int, name: string, slug: string, tenant_count: int, url: string>, slug: string, tenant_count: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -16450,7 +16450,7 @@ export def "tenancy-tenant-groups-read" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<description: string, id: int, name: string, parent: record<id: int, name: string, slug: string, tenant_count: int, url: string>, slug: string, tenant_count: int> {
+]: nothing -> oneof<record<description: string, id: int, name: string, parent: record<id: int, name: string, slug: string, tenant_count: int, url: string>, slug: string, tenant_count: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -16489,7 +16489,7 @@ export def "tenancy-tenant-groups-partial-update" [
   name: string
   --parent: int # nullable
   slug: string # format: slug
-]: any -> record<description: string, id: int, name: string, parent: record<id: int, name: string, slug: string, tenant_count: int, url: string>, slug: string, tenant_count: int> {
+]: any -> oneof<record<description: string, id: int, name: string, parent: record<id: int, name: string, slug: string, tenant_count: int, url: string>, slug: string, tenant_count: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -16531,7 +16531,7 @@ export def "tenancy-tenant-groups-update" [
   name: string
   --parent: int # nullable
   slug: string # format: slug
-]: any -> record<description: string, id: int, name: string, parent: record<id: int, name: string, slug: string, tenant_count: int, url: string>, slug: string, tenant_count: int> {
+]: any -> oneof<record<description: string, id: int, name: string, parent: record<id: int, name: string, slug: string, tenant_count: int, url: string>, slug: string, tenant_count: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -16610,7 +16610,7 @@ export def "tenancy-tenants-list" [
   --tag-n: string
   --limit: int # Number of results to return per page.
   --offset: int # The initial index from which to return the results.
-]: nothing -> record<count: int, next: string, previous: string, results: table<circuit_count: int, cluster_count: int, comments: string, created: string, custom_fields: record, description: string, device_count: int, group: record, id: int, ipaddress_count: int, last_updated: string, name: string, prefix_count: int, rack_count: int, site_count: int, slug: string, tags: list, virtualmachine_count: int, vlan_count: int, vrf_count: int>> {
+]: nothing -> oneof<record<count: int, next: string, previous: string, results: table<circuit_count: int, cluster_count: int, comments: string, created: string, custom_fields: record, description: string, device_count: int, group: record, id: int, ipaddress_count: int, last_updated: string, name: string, prefix_count: int, rack_count: int, site_count: int, slug: string, tags: list, virtualmachine_count: int, vlan_count: int, vrf_count: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "slug" $slug "scalar") (serialize-qp "created" $created "scalar") (serialize-qp "created__gte" $created_gte "scalar") (serialize-qp "created__lte" $created_lte "scalar") (serialize-qp "last_updated" $last_updated "scalar") (serialize-qp "last_updated__gte" $last_updated_gte "scalar") (serialize-qp "last_updated__lte" $last_updated_lte "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "group_id" $group_id "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "tag" $tag "scalar") (serialize-qp "id__n" $id_n "scalar") (serialize-qp "id__lte" $id_lte "scalar") (serialize-qp "id__lt" $id_lt "scalar") (serialize-qp "id__gte" $id_gte "scalar") (serialize-qp "id__gt" $id_gt "scalar") (serialize-qp "name__n" $name_n "scalar") (serialize-qp "name__ic" $name_ic "scalar") (serialize-qp "name__nic" $name_nic "scalar") (serialize-qp "name__iew" $name_iew "scalar") (serialize-qp "name__niew" $name_niew "scalar") (serialize-qp "name__isw" $name_isw "scalar") (serialize-qp "name__nisw" $name_nisw "scalar") (serialize-qp "name__ie" $name_ie "scalar") (serialize-qp "name__nie" $name_nie "scalar") (serialize-qp "slug__n" $slug_n "scalar") (serialize-qp "slug__ic" $slug_ic "scalar") (serialize-qp "slug__nic" $slug_nic "scalar") (serialize-qp "slug__iew" $slug_iew "scalar") (serialize-qp "slug__niew" $slug_niew "scalar") (serialize-qp "slug__isw" $slug_isw "scalar") (serialize-qp "slug__nisw" $slug_nisw "scalar") (serialize-qp "slug__ie" $slug_ie "scalar") (serialize-qp "slug__nie" $slug_nie "scalar") (serialize-qp "group_id__n" $group_id_n "scalar") (serialize-qp "group__n" $group_n "scalar") (serialize-qp "tag__n" $tag_n "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
@@ -16651,7 +16651,7 @@ export def "tenancy-tenants-create" [
   name: string
   slug: string # format: slug
   --tags: list<string>
-]: any -> record<circuit_count: int, cluster_count: int, comments: string, created: string, custom_fields: record, description: string, device_count: int, group: record<id: int, name: string, slug: string, tenant_count: int, url: string>, id: int, ipaddress_count: int, last_updated: string, name: string, prefix_count: int, rack_count: int, site_count: int, slug: string, tags: list<string>, virtualmachine_count: int, vlan_count: int, vrf_count: int> {
+]: any -> oneof<record<circuit_count: int, cluster_count: int, comments: string, created: string, custom_fields: record, description: string, device_count: int, group: record<id: int, name: string, slug: string, tenant_count: int, url: string>, id: int, ipaddress_count: int, last_updated: string, name: string, prefix_count: int, rack_count: int, site_count: int, slug: string, tags: list<string>, virtualmachine_count: int, vlan_count: int, vrf_count: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -16724,7 +16724,7 @@ export def "tenancy-tenants-read" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<circuit_count: int, cluster_count: int, comments: string, created: string, custom_fields: record, description: string, device_count: int, group: record<id: int, name: string, slug: string, tenant_count: int, url: string>, id: int, ipaddress_count: int, last_updated: string, name: string, prefix_count: int, rack_count: int, site_count: int, slug: string, tags: list<string>, virtualmachine_count: int, vlan_count: int, vrf_count: int> {
+]: nothing -> oneof<record<circuit_count: int, cluster_count: int, comments: string, created: string, custom_fields: record, description: string, device_count: int, group: record<id: int, name: string, slug: string, tenant_count: int, url: string>, id: int, ipaddress_count: int, last_updated: string, name: string, prefix_count: int, rack_count: int, site_count: int, slug: string, tags: list<string>, virtualmachine_count: int, vlan_count: int, vrf_count: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -16766,7 +16766,7 @@ export def "tenancy-tenants-partial-update" [
   name: string
   slug: string # format: slug
   --tags: list<string>
-]: any -> record<circuit_count: int, cluster_count: int, comments: string, created: string, custom_fields: record, description: string, device_count: int, group: record<id: int, name: string, slug: string, tenant_count: int, url: string>, id: int, ipaddress_count: int, last_updated: string, name: string, prefix_count: int, rack_count: int, site_count: int, slug: string, tags: list<string>, virtualmachine_count: int, vlan_count: int, vrf_count: int> {
+]: any -> oneof<record<circuit_count: int, cluster_count: int, comments: string, created: string, custom_fields: record, description: string, device_count: int, group: record<id: int, name: string, slug: string, tenant_count: int, url: string>, id: int, ipaddress_count: int, last_updated: string, name: string, prefix_count: int, rack_count: int, site_count: int, slug: string, tags: list<string>, virtualmachine_count: int, vlan_count: int, vrf_count: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -16811,7 +16811,7 @@ export def "tenancy-tenants-update" [
   name: string
   slug: string # format: slug
   --tags: list<string>
-]: any -> record<circuit_count: int, cluster_count: int, comments: string, created: string, custom_fields: record, description: string, device_count: int, group: record<id: int, name: string, slug: string, tenant_count: int, url: string>, id: int, ipaddress_count: int, last_updated: string, name: string, prefix_count: int, rack_count: int, site_count: int, slug: string, tags: list<string>, virtualmachine_count: int, vlan_count: int, vrf_count: int> {
+]: any -> oneof<record<circuit_count: int, cluster_count: int, comments: string, created: string, custom_fields: record, description: string, device_count: int, group: record<id: int, name: string, slug: string, tenant_count: int, url: string>, id: int, ipaddress_count: int, last_updated: string, name: string, prefix_count: int, rack_count: int, site_count: int, slug: string, tags: list<string>, virtualmachine_count: int, vlan_count: int, vrf_count: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -16888,7 +16888,7 @@ export def "virtualization-cluster-groups-list" [
   --description-nie: string
   --limit: int # Number of results to return per page.
   --offset: int # The initial index from which to return the results.
-]: nothing -> record<count: int, next: string, previous: string, results: table<cluster_count: int, description: string, id: int, name: string, slug: string>> {
+]: nothing -> oneof<record<count: int, next: string, previous: string, results: table<cluster_count: int, description: string, id: int, name: string, slug: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "slug" $slug "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "id__n" $id_n "scalar") (serialize-qp "id__lte" $id_lte "scalar") (serialize-qp "id__lt" $id_lt "scalar") (serialize-qp "id__gte" $id_gte "scalar") (serialize-qp "id__gt" $id_gt "scalar") (serialize-qp "name__n" $name_n "scalar") (serialize-qp "name__ic" $name_ic "scalar") (serialize-qp "name__nic" $name_nic "scalar") (serialize-qp "name__iew" $name_iew "scalar") (serialize-qp "name__niew" $name_niew "scalar") (serialize-qp "name__isw" $name_isw "scalar") (serialize-qp "name__nisw" $name_nisw "scalar") (serialize-qp "name__ie" $name_ie "scalar") (serialize-qp "name__nie" $name_nie "scalar") (serialize-qp "slug__n" $slug_n "scalar") (serialize-qp "slug__ic" $slug_ic "scalar") (serialize-qp "slug__nic" $slug_nic "scalar") (serialize-qp "slug__iew" $slug_iew "scalar") (serialize-qp "slug__niew" $slug_niew "scalar") (serialize-qp "slug__isw" $slug_isw "scalar") (serialize-qp "slug__nisw" $slug_nisw "scalar") (serialize-qp "slug__ie" $slug_ie "scalar") (serialize-qp "slug__nie" $slug_nie "scalar") (serialize-qp "description__n" $description_n "scalar") (serialize-qp "description__ic" $description_ic "scalar") (serialize-qp "description__nic" $description_nic "scalar") (serialize-qp "description__iew" $description_iew "scalar") (serialize-qp "description__niew" $description_niew "scalar") (serialize-qp "description__isw" $description_isw "scalar") (serialize-qp "description__nisw" $description_nisw "scalar") (serialize-qp "description__ie" $description_ie "scalar") (serialize-qp "description__nie" $description_nie "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
@@ -16925,7 +16925,7 @@ export def "virtualization-cluster-groups-create" [
   --description: string
   name: string
   slug: string # format: slug
-]: any -> record<cluster_count: int, description: string, id: int, name: string, slug: string> {
+]: any -> oneof<record<cluster_count: int, description: string, id: int, name: string, slug: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -16998,7 +16998,7 @@ export def "virtualization-cluster-groups-read" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<cluster_count: int, description: string, id: int, name: string, slug: string> {
+]: nothing -> oneof<record<cluster_count: int, description: string, id: int, name: string, slug: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -17036,7 +17036,7 @@ export def "virtualization-cluster-groups-partial-update" [
   --description: string
   name: string
   slug: string # format: slug
-]: any -> record<cluster_count: int, description: string, id: int, name: string, slug: string> {
+]: any -> oneof<record<cluster_count: int, description: string, id: int, name: string, slug: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -17077,7 +17077,7 @@ export def "virtualization-cluster-groups-update" [
   --description: string
   name: string
   slug: string # format: slug
-]: any -> record<cluster_count: int, description: string, id: int, name: string, slug: string> {
+]: any -> oneof<record<cluster_count: int, description: string, id: int, name: string, slug: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -17154,7 +17154,7 @@ export def "virtualization-cluster-types-list" [
   --description-nie: string
   --limit: int # Number of results to return per page.
   --offset: int # The initial index from which to return the results.
-]: nothing -> record<count: int, next: string, previous: string, results: table<cluster_count: int, description: string, id: int, name: string, slug: string>> {
+]: nothing -> oneof<record<count: int, next: string, previous: string, results: table<cluster_count: int, description: string, id: int, name: string, slug: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "slug" $slug "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "id__n" $id_n "scalar") (serialize-qp "id__lte" $id_lte "scalar") (serialize-qp "id__lt" $id_lt "scalar") (serialize-qp "id__gte" $id_gte "scalar") (serialize-qp "id__gt" $id_gt "scalar") (serialize-qp "name__n" $name_n "scalar") (serialize-qp "name__ic" $name_ic "scalar") (serialize-qp "name__nic" $name_nic "scalar") (serialize-qp "name__iew" $name_iew "scalar") (serialize-qp "name__niew" $name_niew "scalar") (serialize-qp "name__isw" $name_isw "scalar") (serialize-qp "name__nisw" $name_nisw "scalar") (serialize-qp "name__ie" $name_ie "scalar") (serialize-qp "name__nie" $name_nie "scalar") (serialize-qp "slug__n" $slug_n "scalar") (serialize-qp "slug__ic" $slug_ic "scalar") (serialize-qp "slug__nic" $slug_nic "scalar") (serialize-qp "slug__iew" $slug_iew "scalar") (serialize-qp "slug__niew" $slug_niew "scalar") (serialize-qp "slug__isw" $slug_isw "scalar") (serialize-qp "slug__nisw" $slug_nisw "scalar") (serialize-qp "slug__ie" $slug_ie "scalar") (serialize-qp "slug__nie" $slug_nie "scalar") (serialize-qp "description__n" $description_n "scalar") (serialize-qp "description__ic" $description_ic "scalar") (serialize-qp "description__nic" $description_nic "scalar") (serialize-qp "description__iew" $description_iew "scalar") (serialize-qp "description__niew" $description_niew "scalar") (serialize-qp "description__isw" $description_isw "scalar") (serialize-qp "description__nisw" $description_nisw "scalar") (serialize-qp "description__ie" $description_ie "scalar") (serialize-qp "description__nie" $description_nie "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
@@ -17191,7 +17191,7 @@ export def "virtualization-cluster-types-create" [
   --description: string
   name: string
   slug: string # format: slug
-]: any -> record<cluster_count: int, description: string, id: int, name: string, slug: string> {
+]: any -> oneof<record<cluster_count: int, description: string, id: int, name: string, slug: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -17264,7 +17264,7 @@ export def "virtualization-cluster-types-read" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<cluster_count: int, description: string, id: int, name: string, slug: string> {
+]: nothing -> oneof<record<cluster_count: int, description: string, id: int, name: string, slug: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -17302,7 +17302,7 @@ export def "virtualization-cluster-types-partial-update" [
   --description: string
   name: string
   slug: string # format: slug
-]: any -> record<cluster_count: int, description: string, id: int, name: string, slug: string> {
+]: any -> oneof<record<cluster_count: int, description: string, id: int, name: string, slug: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -17343,7 +17343,7 @@ export def "virtualization-cluster-types-update" [
   --description: string
   name: string
   slug: string # format: slug
-]: any -> record<cluster_count: int, description: string, id: int, name: string, slug: string> {
+]: any -> oneof<record<cluster_count: int, description: string, id: int, name: string, slug: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -17432,7 +17432,7 @@ export def "virtualization-clusters-list" [
   --tag-n: string
   --limit: int # Number of results to return per page.
   --offset: int # The initial index from which to return the results.
-]: nothing -> record<count: int, next: string, previous: string, results: table<comments: string, created: string, custom_fields: record, device_count: int, group: record, id: int, last_updated: string, name: string, site: record, tags: list, tenant: record, type: record, virtualmachine_count: int>> {
+]: nothing -> oneof<record<count: int, next: string, previous: string, results: table<comments: string, created: string, custom_fields: record, device_count: int, group: record, id: int, last_updated: string, name: string, site: record, tags: list, tenant: record, type: record, virtualmachine_count: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "tenant_group_id" $tenant_group_id "scalar") (serialize-qp "tenant_group" $tenant_group "scalar") (serialize-qp "tenant_id" $tenant_id "scalar") (serialize-qp "tenant" $tenant "scalar") (serialize-qp "created" $created "scalar") (serialize-qp "created__gte" $created_gte "scalar") (serialize-qp "created__lte" $created_lte "scalar") (serialize-qp "last_updated" $last_updated "scalar") (serialize-qp "last_updated__gte" $last_updated_gte "scalar") (serialize-qp "last_updated__lte" $last_updated_lte "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "region_id" $region_id "scalar") (serialize-qp "region" $region "scalar") (serialize-qp "site_id" $site_id "scalar") (serialize-qp "site" $site "scalar") (serialize-qp "group_id" $group_id "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "type_id" $type_id "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "tag" $tag "scalar") (serialize-qp "id__n" $id_n "scalar") (serialize-qp "id__lte" $id_lte "scalar") (serialize-qp "id__lt" $id_lt "scalar") (serialize-qp "id__gte" $id_gte "scalar") (serialize-qp "id__gt" $id_gt "scalar") (serialize-qp "name__n" $name_n "scalar") (serialize-qp "name__ic" $name_ic "scalar") (serialize-qp "name__nic" $name_nic "scalar") (serialize-qp "name__iew" $name_iew "scalar") (serialize-qp "name__niew" $name_niew "scalar") (serialize-qp "name__isw" $name_isw "scalar") (serialize-qp "name__nisw" $name_nisw "scalar") (serialize-qp "name__ie" $name_ie "scalar") (serialize-qp "name__nie" $name_nie "scalar") (serialize-qp "tenant_group_id__n" $tenant_group_id_n "scalar") (serialize-qp "tenant_group__n" $tenant_group_n "scalar") (serialize-qp "tenant_id__n" $tenant_id_n "scalar") (serialize-qp "tenant__n" $tenant_n "scalar") (serialize-qp "region_id__n" $region_id_n "scalar") (serialize-qp "region__n" $region_n "scalar") (serialize-qp "site_id__n" $site_id_n "scalar") (serialize-qp "site__n" $site_n "scalar") (serialize-qp "group_id__n" $group_id_n "scalar") (serialize-qp "group__n" $group_n "scalar") (serialize-qp "type_id__n" $type_id_n "scalar") (serialize-qp "type__n" $type_n "scalar") (serialize-qp "tag__n" $tag_n "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
@@ -17474,7 +17474,7 @@ export def "virtualization-clusters-create" [
   --tags: list<string>
   --tenant: int # nullable
   type: int
-]: any -> record<comments: string, created: string, custom_fields: record, device_count: int, group: record<cluster_count: int, id: int, name: string, slug: string, url: string>, id: int, last_updated: string, name: string, site: record<id: int, name: string, slug: string, url: string>, tags: list<string>, tenant: record<id: int, name: string, slug: string, url: string>, type: record<cluster_count: int, id: int, name: string, slug: string, url: string>, virtualmachine_count: int> {
+]: any -> oneof<record<comments: string, created: string, custom_fields: record, device_count: int, group: record<cluster_count: int, id: int, name: string, slug: string, url: string>, id: int, last_updated: string, name: string, site: record<id: int, name: string, slug: string, url: string>, tags: list<string>, tenant: record<id: int, name: string, slug: string, url: string>, type: record<cluster_count: int, id: int, name: string, slug: string, url: string>, virtualmachine_count: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -17547,7 +17547,7 @@ export def "virtualization-clusters-read" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<comments: string, created: string, custom_fields: record, device_count: int, group: record<cluster_count: int, id: int, name: string, slug: string, url: string>, id: int, last_updated: string, name: string, site: record<id: int, name: string, slug: string, url: string>, tags: list<string>, tenant: record<id: int, name: string, slug: string, url: string>, type: record<cluster_count: int, id: int, name: string, slug: string, url: string>, virtualmachine_count: int> {
+]: nothing -> oneof<record<comments: string, created: string, custom_fields: record, device_count: int, group: record<cluster_count: int, id: int, name: string, slug: string, url: string>, id: int, last_updated: string, name: string, site: record<id: int, name: string, slug: string, url: string>, tags: list<string>, tenant: record<id: int, name: string, slug: string, url: string>, type: record<cluster_count: int, id: int, name: string, slug: string, url: string>, virtualmachine_count: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -17590,7 +17590,7 @@ export def "virtualization-clusters-partial-update" [
   --tags: list<string>
   --tenant: int # nullable
   type: int
-]: any -> record<comments: string, created: string, custom_fields: record, device_count: int, group: record<cluster_count: int, id: int, name: string, slug: string, url: string>, id: int, last_updated: string, name: string, site: record<id: int, name: string, slug: string, url: string>, tags: list<string>, tenant: record<id: int, name: string, slug: string, url: string>, type: record<cluster_count: int, id: int, name: string, slug: string, url: string>, virtualmachine_count: int> {
+]: any -> oneof<record<comments: string, created: string, custom_fields: record, device_count: int, group: record<cluster_count: int, id: int, name: string, slug: string, url: string>, id: int, last_updated: string, name: string, site: record<id: int, name: string, slug: string, url: string>, tags: list<string>, tenant: record<id: int, name: string, slug: string, url: string>, type: record<cluster_count: int, id: int, name: string, slug: string, url: string>, virtualmachine_count: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -17636,7 +17636,7 @@ export def "virtualization-clusters-update" [
   --tags: list<string>
   --tenant: int # nullable
   type: int
-]: any -> record<comments: string, created: string, custom_fields: record, device_count: int, group: record<cluster_count: int, id: int, name: string, slug: string, url: string>, id: int, last_updated: string, name: string, site: record<id: int, name: string, slug: string, url: string>, tags: list<string>, tenant: record<id: int, name: string, slug: string, url: string>, type: record<cluster_count: int, id: int, name: string, slug: string, url: string>, virtualmachine_count: int> {
+]: any -> oneof<record<comments: string, created: string, custom_fields: record, device_count: int, group: record<cluster_count: int, id: int, name: string, slug: string, url: string>, id: int, last_updated: string, name: string, site: record<id: int, name: string, slug: string, url: string>, tags: list<string>, tenant: record<id: int, name: string, slug: string, url: string>, type: record<cluster_count: int, id: int, name: string, slug: string, url: string>, virtualmachine_count: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -17714,7 +17714,7 @@ export def "virtualization-interfaces-list" [
   --mac-address-nie: string
   --limit: int # Number of results to return per page.
   --offset: int # The initial index from which to return the results.
-]: nothing -> record<count: int, next: string, previous: string, results: table<description: string, enabled: bool, id: int, mac_address: string, mode: record, mtu: int, name: string, tagged_vlans: list, tags: list, type: record, untagged_vlan: record, virtual_machine: record>> {
+]: nothing -> oneof<record<count: int, next: string, previous: string, results: table<description: string, enabled: bool, id: int, mac_address: string, mode: record, mtu: int, name: string, tagged_vlans: list, tags: list, type: record, untagged_vlan: record, virtual_machine: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "enabled" $enabled "scalar") (serialize-qp "mtu" $mtu "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "virtual_machine_id" $virtual_machine_id "scalar") (serialize-qp "virtual_machine" $virtual_machine "scalar") (serialize-qp "mac_address" $mac_address "scalar") (serialize-qp "id__n" $id_n "scalar") (serialize-qp "id__lte" $id_lte "scalar") (serialize-qp "id__lt" $id_lt "scalar") (serialize-qp "id__gte" $id_gte "scalar") (serialize-qp "id__gt" $id_gt "scalar") (serialize-qp "name__n" $name_n "scalar") (serialize-qp "name__ic" $name_ic "scalar") (serialize-qp "name__nic" $name_nic "scalar") (serialize-qp "name__iew" $name_iew "scalar") (serialize-qp "name__niew" $name_niew "scalar") (serialize-qp "name__isw" $name_isw "scalar") (serialize-qp "name__nisw" $name_nisw "scalar") (serialize-qp "name__ie" $name_ie "scalar") (serialize-qp "name__nie" $name_nie "scalar") (serialize-qp "mtu__n" $mtu_n "scalar") (serialize-qp "mtu__lte" $mtu_lte "scalar") (serialize-qp "mtu__lt" $mtu_lt "scalar") (serialize-qp "mtu__gte" $mtu_gte "scalar") (serialize-qp "mtu__gt" $mtu_gt "scalar") (serialize-qp "virtual_machine_id__n" $virtual_machine_id_n "scalar") (serialize-qp "virtual_machine__n" $virtual_machine_n "scalar") (serialize-qp "mac_address__n" $mac_address_n "scalar") (serialize-qp "mac_address__ic" $mac_address_ic "scalar") (serialize-qp "mac_address__nic" $mac_address_nic "scalar") (serialize-qp "mac_address__iew" $mac_address_iew "scalar") (serialize-qp "mac_address__niew" $mac_address_niew "scalar") (serialize-qp "mac_address__isw" $mac_address_isw "scalar") (serialize-qp "mac_address__nisw" $mac_address_nisw "scalar") (serialize-qp "mac_address__ie" $mac_address_ie "scalar") (serialize-qp "mac_address__nie" $mac_address_nie "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
@@ -17759,7 +17759,7 @@ export def "virtualization-interfaces-create" [
   type: string@type-completer-3
   --untagged-vlan: int # nullable
   --virtual-machine: int # nullable
-]: any -> record<description: string, enabled: bool, id: int, mac_address: string, mode: record<label: string, value: string>, mtu: int, name: string, tagged_vlans: table<display_name: string, id: int, name: string, url: string, vid: int>, tags: list<string>, type: record<label: string, value: string>, untagged_vlan: record<display_name: string, id: int, name: string, url: string, vid: int>, virtual_machine: record<id: int, name: string, url: string>> {
+]: any -> oneof<record<description: string, enabled: bool, id: int, mac_address: string, mode: record<label: string, value: string>, mtu: int, name: string, tagged_vlans: table<display_name: string, id: int, name: string, url: string, vid: int>, tags: list<string>, type: record<label: string, value: string>, untagged_vlan: record<display_name: string, id: int, name: string, url: string, vid: int>, virtual_machine: record<id: int, name: string, url: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -17832,7 +17832,7 @@ export def "virtualization-interfaces-read" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<description: string, enabled: bool, id: int, mac_address: string, mode: record<label: string, value: string>, mtu: int, name: string, tagged_vlans: table<display_name: string, id: int, name: string, url: string, vid: int>, tags: list<string>, type: record<label: string, value: string>, untagged_vlan: record<display_name: string, id: int, name: string, url: string, vid: int>, virtual_machine: record<id: int, name: string, url: string>> {
+]: nothing -> oneof<record<description: string, enabled: bool, id: int, mac_address: string, mode: record<label: string, value: string>, mtu: int, name: string, tagged_vlans: table<display_name: string, id: int, name: string, url: string, vid: int>, tags: list<string>, type: record<label: string, value: string>, untagged_vlan: record<display_name: string, id: int, name: string, url: string, vid: int>, virtual_machine: record<id: int, name: string, url: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -17878,7 +17878,7 @@ export def "virtualization-interfaces-partial-update" [
   type: string@type-completer-3
   --untagged-vlan: int # nullable
   --virtual-machine: int # nullable
-]: any -> record<description: string, enabled: bool, id: int, mac_address: string, mode: record<label: string, value: string>, mtu: int, name: string, tagged_vlans: table<display_name: string, id: int, name: string, url: string, vid: int>, tags: list<string>, type: record<label: string, value: string>, untagged_vlan: record<display_name: string, id: int, name: string, url: string, vid: int>, virtual_machine: record<id: int, name: string, url: string>> {
+]: any -> oneof<record<description: string, enabled: bool, id: int, mac_address: string, mode: record<label: string, value: string>, mtu: int, name: string, tagged_vlans: table<display_name: string, id: int, name: string, url: string, vid: int>, tags: list<string>, type: record<label: string, value: string>, untagged_vlan: record<display_name: string, id: int, name: string, url: string, vid: int>, virtual_machine: record<id: int, name: string, url: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -17927,7 +17927,7 @@ export def "virtualization-interfaces-update" [
   type: string@type-completer-3
   --untagged-vlan: int # nullable
   --virtual-machine: int # nullable
-]: any -> record<description: string, enabled: bool, id: int, mac_address: string, mode: record<label: string, value: string>, mtu: int, name: string, tagged_vlans: table<display_name: string, id: int, name: string, url: string, vid: int>, tags: list<string>, type: record<label: string, value: string>, untagged_vlan: record<display_name: string, id: int, name: string, url: string, vid: int>, virtual_machine: record<id: int, name: string, url: string>> {
+]: any -> oneof<record<description: string, enabled: bool, id: int, mac_address: string, mode: record<label: string, value: string>, mtu: int, name: string, tagged_vlans: table<display_name: string, id: int, name: string, url: string, vid: int>, tags: list<string>, type: record<label: string, value: string>, untagged_vlan: record<display_name: string, id: int, name: string, url: string, vid: int>, virtual_machine: record<id: int, name: string, url: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -18059,7 +18059,7 @@ export def "virtualization-virtual-machines-list" [
   --tag-n: string
   --limit: int # Number of results to return per page.
   --offset: int # The initial index from which to return the results.
-]: nothing -> record<count: int, next: string, previous: string, results: table<cluster: record, comments: string, config_context: record, created: string, custom_fields: record, disk: int, id: int, last_updated: string, local_context_data: string, memory: int, name: string, platform: record, primary_ip: record, primary_ip4: record, primary_ip6: record, role: record, site: record, status: record, tags: list, tenant: record, vcpus: int>> {
+]: nothing -> oneof<record<count: int, next: string, previous: string, results: table<cluster: record, comments: string, config_context: record, created: string, custom_fields: record, disk: int, id: int, last_updated: string, local_context_data: string, memory: int, name: string, platform: record, primary_ip: record, primary_ip4: record, primary_ip6: record, role: record, site: record, status: record, tags: list, tenant: record, vcpus: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "cluster" $cluster "scalar") (serialize-qp "vcpus" $vcpus "scalar") (serialize-qp "memory" $memory "scalar") (serialize-qp "disk" $disk "scalar") (serialize-qp "local_context_data" $local_context_data "scalar") (serialize-qp "tenant_group_id" $tenant_group_id "scalar") (serialize-qp "tenant_group" $tenant_group "scalar") (serialize-qp "tenant_id" $tenant_id "scalar") (serialize-qp "tenant" $tenant "scalar") (serialize-qp "created" $created "scalar") (serialize-qp "created__gte" $created_gte "scalar") (serialize-qp "created__lte" $created_lte "scalar") (serialize-qp "last_updated" $last_updated "scalar") (serialize-qp "last_updated__gte" $last_updated_gte "scalar") (serialize-qp "last_updated__lte" $last_updated_lte "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "cluster_group_id" $cluster_group_id "scalar") (serialize-qp "cluster_group" $cluster_group "scalar") (serialize-qp "cluster_type_id" $cluster_type_id "scalar") (serialize-qp "cluster_type" $cluster_type "scalar") (serialize-qp "cluster_id" $cluster_id "scalar") (serialize-qp "region_id" $region_id "scalar") (serialize-qp "region" $region "scalar") (serialize-qp "site_id" $site_id "scalar") (serialize-qp "site" $site "scalar") (serialize-qp "role_id" $role_id "scalar") (serialize-qp "role" $role "scalar") (serialize-qp "platform_id" $platform_id "scalar") (serialize-qp "platform" $platform "scalar") (serialize-qp "mac_address" $mac_address "scalar") (serialize-qp "tag" $tag "scalar") (serialize-qp "id__n" $id_n "scalar") (serialize-qp "id__lte" $id_lte "scalar") (serialize-qp "id__lt" $id_lt "scalar") (serialize-qp "id__gte" $id_gte "scalar") (serialize-qp "id__gt" $id_gt "scalar") (serialize-qp "name__n" $name_n "scalar") (serialize-qp "name__ic" $name_ic "scalar") (serialize-qp "name__nic" $name_nic "scalar") (serialize-qp "name__iew" $name_iew "scalar") (serialize-qp "name__niew" $name_niew "scalar") (serialize-qp "name__isw" $name_isw "scalar") (serialize-qp "name__nisw" $name_nisw "scalar") (serialize-qp "name__ie" $name_ie "scalar") (serialize-qp "name__nie" $name_nie "scalar") (serialize-qp "cluster__n" $cluster_n "scalar") (serialize-qp "vcpus__n" $vcpus_n "scalar") (serialize-qp "vcpus__lte" $vcpus_lte "scalar") (serialize-qp "vcpus__lt" $vcpus_lt "scalar") (serialize-qp "vcpus__gte" $vcpus_gte "scalar") (serialize-qp "vcpus__gt" $vcpus_gt "scalar") (serialize-qp "memory__n" $memory_n "scalar") (serialize-qp "memory__lte" $memory_lte "scalar") (serialize-qp "memory__lt" $memory_lt "scalar") (serialize-qp "memory__gte" $memory_gte "scalar") (serialize-qp "memory__gt" $memory_gt "scalar") (serialize-qp "disk__n" $disk_n "scalar") (serialize-qp "disk__lte" $disk_lte "scalar") (serialize-qp "disk__lt" $disk_lt "scalar") (serialize-qp "disk__gte" $disk_gte "scalar") (serialize-qp "disk__gt" $disk_gt "scalar") (serialize-qp "tenant_group_id__n" $tenant_group_id_n "scalar") (serialize-qp "tenant_group__n" $tenant_group_n "scalar") (serialize-qp "tenant_id__n" $tenant_id_n "scalar") (serialize-qp "tenant__n" $tenant_n "scalar") (serialize-qp "status__n" $status_n "scalar") (serialize-qp "cluster_group_id__n" $cluster_group_id_n "scalar") (serialize-qp "cluster_group__n" $cluster_group_n "scalar") (serialize-qp "cluster_type_id__n" $cluster_type_id_n "scalar") (serialize-qp "cluster_type__n" $cluster_type_n "scalar") (serialize-qp "cluster_id__n" $cluster_id_n "scalar") (serialize-qp "region_id__n" $region_id_n "scalar") (serialize-qp "region__n" $region_n "scalar") (serialize-qp "site_id__n" $site_id_n "scalar") (serialize-qp "site__n" $site_n "scalar") (serialize-qp "role_id__n" $role_id_n "scalar") (serialize-qp "role__n" $role_n "scalar") (serialize-qp "platform_id__n" $platform_id_n "scalar") (serialize-qp "platform__n" $platform_n "scalar") (serialize-qp "mac_address__n" $mac_address_n "scalar") (serialize-qp "mac_address__ic" $mac_address_ic "scalar") (serialize-qp "mac_address__nic" $mac_address_nic "scalar") (serialize-qp "mac_address__iew" $mac_address_iew "scalar") (serialize-qp "mac_address__niew" $mac_address_niew "scalar") (serialize-qp "mac_address__isw" $mac_address_isw "scalar") (serialize-qp "mac_address__nisw" $mac_address_nisw "scalar") (serialize-qp "mac_address__ie" $mac_address_ie "scalar") (serialize-qp "mac_address__nie" $mac_address_nie "scalar") (serialize-qp "tag__n" $tag_n "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
@@ -18108,7 +18108,7 @@ export def "virtualization-virtual-machines-create" [
   --tags: list<string>
   --tenant: int # nullable
   --vcpus: int # nullable
-]: any -> record<cluster: record<id: int, name: string, url: string, virtualmachine_count: int>, comments: string, config_context: record, created: string, custom_fields: record, disk: int, id: int, last_updated: string, local_context_data: string, memory: int, name: string, platform: record<device_count: int, id: int, name: string, slug: string, url: string, virtualmachine_count: int>, primary_ip: record<address: string, family: string, id: int, url: string>, primary_ip4: record<address: string, family: string, id: int, url: string>, primary_ip6: record<address: string, family: string, id: int, url: string>, role: record<device_count: int, id: int, name: string, slug: string, url: string, virtualmachine_count: int>, site: record<id: int, name: string, slug: string, url: string>, status: record<label: string, value: string>, tags: list<string>, tenant: record<id: int, name: string, slug: string, url: string>, vcpus: int> {
+]: any -> oneof<record<cluster: record<id: int, name: string, url: string, virtualmachine_count: int>, comments: string, config_context: record, created: string, custom_fields: record, disk: int, id: int, last_updated: string, local_context_data: string, memory: int, name: string, platform: record<device_count: int, id: int, name: string, slug: string, url: string, virtualmachine_count: int>, primary_ip: record<address: string, family: string, id: int, url: string>, primary_ip4: record<address: string, family: string, id: int, url: string>, primary_ip6: record<address: string, family: string, id: int, url: string>, role: record<device_count: int, id: int, name: string, slug: string, url: string, virtualmachine_count: int>, site: record<id: int, name: string, slug: string, url: string>, status: record<label: string, value: string>, tags: list<string>, tenant: record<id: int, name: string, slug: string, url: string>, vcpus: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -18181,7 +18181,7 @@ export def "virtualization-virtual-machines-read" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<cluster: record<id: int, name: string, url: string, virtualmachine_count: int>, comments: string, config_context: record, created: string, custom_fields: record, disk: int, id: int, last_updated: string, local_context_data: string, memory: int, name: string, platform: record<device_count: int, id: int, name: string, slug: string, url: string, virtualmachine_count: int>, primary_ip: record<address: string, family: string, id: int, url: string>, primary_ip4: record<address: string, family: string, id: int, url: string>, primary_ip6: record<address: string, family: string, id: int, url: string>, role: record<device_count: int, id: int, name: string, slug: string, url: string, virtualmachine_count: int>, site: record<id: int, name: string, slug: string, url: string>, status: record<label: string, value: string>, tags: list<string>, tenant: record<id: int, name: string, slug: string, url: string>, vcpus: int> {
+]: nothing -> oneof<record<cluster: record<id: int, name: string, url: string, virtualmachine_count: int>, comments: string, config_context: record, created: string, custom_fields: record, disk: int, id: int, last_updated: string, local_context_data: string, memory: int, name: string, platform: record<device_count: int, id: int, name: string, slug: string, url: string, virtualmachine_count: int>, primary_ip: record<address: string, family: string, id: int, url: string>, primary_ip4: record<address: string, family: string, id: int, url: string>, primary_ip6: record<address: string, family: string, id: int, url: string>, role: record<device_count: int, id: int, name: string, slug: string, url: string, virtualmachine_count: int>, site: record<id: int, name: string, slug: string, url: string>, status: record<label: string, value: string>, tags: list<string>, tenant: record<id: int, name: string, slug: string, url: string>, vcpus: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -18231,7 +18231,7 @@ export def "virtualization-virtual-machines-partial-update" [
   --tags: list<string>
   --tenant: int # nullable
   --vcpus: int # nullable
-]: any -> record<cluster: record<id: int, name: string, url: string, virtualmachine_count: int>, comments: string, config_context: record, created: string, custom_fields: record, disk: int, id: int, last_updated: string, local_context_data: string, memory: int, name: string, platform: record<device_count: int, id: int, name: string, slug: string, url: string, virtualmachine_count: int>, primary_ip: record<address: string, family: string, id: int, url: string>, primary_ip4: record<address: string, family: string, id: int, url: string>, primary_ip6: record<address: string, family: string, id: int, url: string>, role: record<device_count: int, id: int, name: string, slug: string, url: string, virtualmachine_count: int>, site: record<id: int, name: string, slug: string, url: string>, status: record<label: string, value: string>, tags: list<string>, tenant: record<id: int, name: string, slug: string, url: string>, vcpus: int> {
+]: any -> oneof<record<cluster: record<id: int, name: string, url: string, virtualmachine_count: int>, comments: string, config_context: record, created: string, custom_fields: record, disk: int, id: int, last_updated: string, local_context_data: string, memory: int, name: string, platform: record<device_count: int, id: int, name: string, slug: string, url: string, virtualmachine_count: int>, primary_ip: record<address: string, family: string, id: int, url: string>, primary_ip4: record<address: string, family: string, id: int, url: string>, primary_ip6: record<address: string, family: string, id: int, url: string>, role: record<device_count: int, id: int, name: string, slug: string, url: string, virtualmachine_count: int>, site: record<id: int, name: string, slug: string, url: string>, status: record<label: string, value: string>, tags: list<string>, tenant: record<id: int, name: string, slug: string, url: string>, vcpus: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -18284,7 +18284,7 @@ export def "virtualization-virtual-machines-update" [
   --tags: list<string>
   --tenant: int # nullable
   --vcpus: int # nullable
-]: any -> record<cluster: record<id: int, name: string, url: string, virtualmachine_count: int>, comments: string, config_context: record, created: string, custom_fields: record, disk: int, id: int, last_updated: string, local_context_data: string, memory: int, name: string, platform: record<device_count: int, id: int, name: string, slug: string, url: string, virtualmachine_count: int>, primary_ip: record<address: string, family: string, id: int, url: string>, primary_ip4: record<address: string, family: string, id: int, url: string>, primary_ip6: record<address: string, family: string, id: int, url: string>, role: record<device_count: int, id: int, name: string, slug: string, url: string, virtualmachine_count: int>, site: record<id: int, name: string, slug: string, url: string>, status: record<label: string, value: string>, tags: list<string>, tenant: record<id: int, name: string, slug: string, url: string>, vcpus: int> {
+]: any -> oneof<record<cluster: record<id: int, name: string, url: string, virtualmachine_count: int>, comments: string, config_context: record, created: string, custom_fields: record, disk: int, id: int, last_updated: string, local_context_data: string, memory: int, name: string, platform: record<device_count: int, id: int, name: string, slug: string, url: string, virtualmachine_count: int>, primary_ip: record<address: string, family: string, id: int, url: string>, primary_ip4: record<address: string, family: string, id: int, url: string>, primary_ip6: record<address: string, family: string, id: int, url: string>, role: record<device_count: int, id: int, name: string, slug: string, url: string, virtualmachine_count: int>, site: record<id: int, name: string, slug: string, url: string>, status: record<label: string, value: string>, tags: list<string>, tenant: record<id: int, name: string, slug: string, url: string>, vcpus: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
